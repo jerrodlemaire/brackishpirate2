@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from 'react'
+import React, { useState, useRef, useCallback, useEffect } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   RefreshControl, Dimensions, PanResponder,
@@ -7,6 +7,8 @@ import Svg, { Polyline } from 'react-native-svg'
 import * as Haptics from 'expo-haptics'
 import { Colors, Typography, Spacing, Radius } from '../../constants/theme'
 import { getSolunarForDate, buildActivityCurve, scoreColor, scoreLabel } from '../../utils/solunar'
+import { fetchTideHourly } from '../../utils/tides'
+import { fetchWeatherAndForecast, fetchMarineData, fetchWaterTemp, weatherEmoji, windDir } from '../../utils/weather'
 import JollyRoger from '../../components/JollyRoger'
 
 const { width } = Dimensions.get('window')
@@ -23,11 +25,13 @@ const PLOT_H  = CHART_H - PAD_T - PAD_B
 // ── Mini sparkline ────────────────────────────────────────────────────────────
 function MiniSparkline({ values, color, h = 28, w = 88 }) {
   if (!values || values.length < 2) return null
-  const min  = Math.min(...values)
-  const max  = Math.max(...values)
+  const filtered = values.filter(v => v != null && !isNaN(v))
+  if (filtered.length < 2) return null
+  const min  = Math.min(...filtered)
+  const max  = Math.max(...filtered)
   const rng  = max - min || 1
-  const stepX = w / (values.length - 1)
-  const pts  = values.map((v, i) => {
+  const stepX = w / (filtered.length - 1)
+  const pts  = filtered.map((v, i) => {
     const x = i * stepX
     const y = h - ((v - min) / rng) * h * 0.8 - h * 0.1
     return `${x.toFixed(1)},${y.toFixed(1)}`
@@ -57,7 +61,6 @@ function ActivityWave({ sol, scrubIdx }) {
 
   return (
     <View style={{ height: CHART_H, width: CHART_W }}>
-      {/* Major/minor window bands */}
       {windows.map((w, i) => {
         const x1 = PAD_L + (w.startH / 24) * PLOT_W
         const x2 = PAD_L + (Math.min(w.endH, 24) / 24) * PLOT_W
@@ -70,7 +73,6 @@ function ActivityWave({ sol, scrubIdx }) {
         )
       })}
 
-      {/* Area bars */}
       {pts.map((pt, i) => {
         if (i === pts.length - 1) return null
         const next = pts[i + 1]
@@ -80,14 +82,11 @@ function ActivityWave({ sol, scrubIdx }) {
             position: 'absolute', left: pt.x, top: avgY,
             width: stepX + 0.5,
             height: Math.max(0, CHART_H - PAD_B - avgY),
-            backgroundColor: scrubIdx === i
-              ? 'rgba(196,154,42,0.55)'
-              : 'rgba(196,154,42,0.28)',
+            backgroundColor: scrubIdx === i ? 'rgba(196,154,42,0.55)' : 'rgba(196,154,42,0.28)',
           }}/>
         )
       })}
 
-      {/* Dots */}
       {pts.map((pt, i) => (
         <View key={i} style={[
           aw.dot,
@@ -96,17 +95,14 @@ function ActivityWave({ sol, scrubIdx }) {
         ]}/>
       ))}
 
-      {/* NOW line */}
       <View style={[aw.nowLine, { left: nowX }]}>
         <Text style={aw.nowLbl}>NOW</Text>
       </View>
 
-      {/* Scrub line */}
       {scrubIdx !== null && (
         <View style={[aw.scrubLine, { left: pts[scrubIdx].x }]}/>
       )}
 
-      {/* X-axis labels */}
       {['12a', '6a', '12p', '6p', '12a'].map((l, i) => (
         <Text key={i} style={[aw.xLbl, {
           left: PAD_L + (PLOT_W / 4) * i - 6,
@@ -126,44 +122,47 @@ const aw = StyleSheet.create({
   xLbl:     { position: 'absolute', fontSize: 8, color: 'rgba(196,154,42,0.5)' },
 })
 
-// ── Static mock data ──────────────────────────────────────────────────────────
-const FORECAST = [
-  { day: 'Today', ico: '☀️', high: '84°', low: '74°', wind: '9 mph',  today: true },
-  { day: 'Sat',   ico: '⛅', high: '81°', low: '72°', wind: '12 mph' },
-  { day: 'Sun',   ico: '🌦️', high: '77°', low: '68°', wind: '16 mph' },
-  { day: 'Mon',   ico: '⛈️', high: '72°', low: '65°', wind: '22 mph' },
-  { day: 'Tue',   ico: '☀️', high: '83°', low: '73°', wind: '8 mph'  },
-  { day: 'Wed',   ico: '☀️', high: '86°', low: '75°', wind: '7 mph'  },
-  { day: 'Thu',   ico: '⛅', high: '82°', low: '72°', wind: '10 mph' },
-]
-
-const MOCK_REPORTS = [
-  {
-    initials: 'JB', name: 'Jake B.', time: '2h ago',
-    loc: 'South Shore, Pontchartrain',
-    species: ['Speckled Trout', 'Redfish'],
-    note: 'Gulp shrimp under cork · AM incoming tide',
-    stars: '★★★★★',
-  },
-  {
-    initials: 'ML', name: 'M. Landry', time: '5h ago',
-    loc: 'Chef Menteur Pass',
-    species: ['Flounder', 'Sheepshead'],
-    note: 'Live shrimp, jig · Outgoing tide',
-    stars: '★★★★☆',
-  },
-]
-
 // ── Screen ────────────────────────────────────────────────────────────────────
 export default function DashboardScreen({ navigation }) {
   const [refreshing, setRefreshing] = useState(false)
   const [scrubIdx,   setScrubIdx]   = useState(null)
   const lastHaptic                  = useRef(-1)
 
-  const sol    = getSolunarForDate(new Date())
-  const curve  = buildActivityCurve(sol)
-  const stepX  = PLOT_W / (curve.length - 1)
+  const [weather,    setWeather]    = useState(null)
+  const [marine,     setMarine]     = useState(null)
+  const [waterTemp,  setWaterTemp]  = useState(null)
+  const [hourlyTide, setHourlyTide] = useState([])
+
+  const sol      = getSolunarForDate(new Date())
+  const curve    = buildActivityCurve(sol)
+  const stepX    = PLOT_W / (curve.length - 1)
   const actScore = sol.activityScore
+
+  const loadData = useCallback(async () => {
+    try {
+      const [w, m, wt, tide] = await Promise.all([
+        fetchWeatherAndForecast(),
+        fetchMarineData(),
+        fetchWaterTemp(),
+        fetchTideHourly(new Date()),
+      ])
+      setWeather(w)
+      setMarine(m)
+      setWaterTemp(wt)
+      setHourlyTide(tide)
+    } catch (e) {
+      console.log('Dashboard load error:', e)
+    } finally {
+      setRefreshing(false)
+    }
+  }, [])
+
+  useEffect(() => { loadData() }, [loadData])
+
+  const onRefresh = useCallback(() => {
+    setRefreshing(true)
+    loadData()
+  }, [loadData])
 
   const getIdx = (x) => {
     const rel = x - PAD_L
@@ -190,18 +189,71 @@ export default function DashboardScreen({ navigation }) {
     onPanResponderRelease: () => { setTimeout(() => setScrubIdx(null), 2000) },
   })
 
-  const onRefresh = useCallback(() => {
-    setRefreshing(true)
-    setTimeout(() => setRefreshing(false), 800)
-  }, [])
+  // ── Derived display values ─────────────────────────────────────────────────
 
-  // Mini sparklines — solunar curve + sine tide placeholder
-  const solMini  = curve.slice(0, 24)
-  const tideMini = Array.from({ length: 24 }, (_, i) =>
-    Math.sin((i / 24) * 2 * Math.PI) * 0.5 + 0.9
-  )
-  const tempMini = [74, 76, 79, 81, 82, 83, 84, 84, 83, 81, 79, 77]
-  const waveMini = [1.4, 1.5, 1.6, 1.8, 2.0, 1.9, 1.8, 1.7, 1.6, 1.5, 1.4, 1.3]
+  const nowHour      = new Date().getHours()
+  const curTide      = hourlyTide[nowHour]      ? parseFloat(hourlyTide[nowHour].v)      : null
+  const prevTide     = hourlyTide[nowHour - 1]  ? parseFloat(hourlyTide[nowHour - 1].v)  : null
+  const tideRising   = curTide !== null && prevTide !== null && curTide > prevTide
+
+  const airTemp      = weather ? Math.round(weather.current.temperature_2m)  : null
+  const windSpd      = weather ? Math.round(weather.current.windspeed_10m)   : null
+  const windDirStr   = weather ? windDir(weather.current.winddirection_10m)  : ''
+  const waveHt       = marine?.current?.wave_height != null
+    ? marine.current.wave_height.toFixed(1) : null
+  const waveDirStr   = marine?.current?.wave_direction != null
+    ? windDir(marine.current.wave_direction) : ''
+
+  const todayLow     = weather?.daily?.temperature_2m_min?.[0]
+
+  const chips = [
+    {
+      label: 'Air',
+      val:   airTemp !== null ? `${airTemp}°F` : '—',
+      dot:   airTemp != null && airTemp > 95 ? Colors.doubloonGold : Colors.marshGreen,
+    },
+    {
+      label: 'Water',
+      val:   waterTemp !== null ? `${Math.round(waterTemp)}°F` : '—',
+      dot:   waterTemp != null && waterTemp >= 68 && waterTemp <= 82 ? Colors.marshGreen : Colors.doubloonGold,
+    },
+    {
+      label: 'Wind',
+      val:   windSpd !== null ? `${windDirStr} ${windSpd}` : '—',
+      dot:   windSpd != null && windSpd > 20 ? Colors.textSecondary : windSpd > 12 ? Colors.doubloonGold : Colors.marshGreen,
+    },
+    {
+      label: 'Tide',
+      val:   curTide !== null ? `${tideRising ? '↑' : '↓'}${curTide.toFixed(1)}` : '—',
+      dot:   tideRising ? Colors.marshGreen : Colors.doubloonGold,
+    },
+  ]
+
+  const tideSpark    = hourlyTide.length > 0
+    ? hourlyTide.slice(0, 24).map(p => parseFloat(p.v))
+    : [0.9, 1.2, 1.5, 1.8, 1.9, 1.8, 1.5, 1.1, 0.8, 0.6, 0.5, 0.6]
+  const solMini      = curve.slice(0, 24)
+  const tempSpark    = weather?.hourlyTemps?.length > 0
+    ? weather.hourlyTemps : [74, 76, 79, 81, 82, 83, 84, 84, 83, 81, 79, 77]
+  const waveSpark    = marine?.hourlyWaves?.filter(v => v != null).length > 0
+    ? marine.hourlyWaves : [1.4, 1.5, 1.6, 1.8, 2.0, 1.9, 1.8, 1.7, 1.6, 1.5, 1.4, 1.3]
+
+  const forecast = weather?.daily
+    ? weather.daily.time.slice(0, 7).map((date, i) => ({
+        day:   i === 0 ? 'Today' : new Date(date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short' }),
+        ico:   weatherEmoji(weather.daily.weathercode[i]),
+        high:  `${Math.round(weather.daily.temperature_2m_max[i])}°`,
+        low:   `${Math.round(weather.daily.temperature_2m_min[i])}°`,
+        wind:  `${Math.round(weather.daily.windspeed_10m_max[i])} mph`,
+        today: i === 0,
+      }))
+    : [
+        { day: 'Today', ico: '⛅', high: '—', low: '—', wind: '—', today: true },
+        ...Array.from({ length: 6 }, (_, i) => ({
+          day:  ['Mon','Tue','Wed','Thu','Fri','Sat'][i],
+          ico:  '⛅', high: '—', low: '—', wind: '—', today: false,
+        })),
+      ]
 
   const displayScore = scrubIdx !== null ? curve[scrubIdx] : actScore
   const displayLabel = scrubIdx !== null ? scoreLabel(curve[scrubIdx]) : scoreLabel(actScore)
@@ -269,12 +321,7 @@ export default function DashboardScreen({ navigation }) {
 
       {/* ── CONDITION CHIPS ────────────────────────────────── */}
       <View style={s.chipRow}>
-        {[
-          { label: 'Air',   val: '82°F',  dot: Colors.marshGreen },
-          { label: 'Water', val: '74°F',  dot: Colors.marshGreen },
-          { label: 'Wind',  val: 'SSE 9', dot: Colors.doubloonGold },
-          { label: 'Tide',  val: '↑+0.6', dot: Colors.marshGreen },
-        ].map((c, i) => (
+        {chips.map((c, i) => (
           <TouchableOpacity key={i} style={s.condChip} activeOpacity={0.75}>
             <View style={[s.condDot, { backgroundColor: c.dot }]}/>
             <Text style={s.condVal}>{c.val}</Text>
@@ -291,9 +338,13 @@ export default function DashboardScreen({ navigation }) {
           activeOpacity={0.8}
         >
           <Text style={s.dataCardLabel}>TIDES</Text>
-          <Text style={[s.dataCardVal, { color: Colors.brackishWater }]}>0.82 ft</Text>
-          <Text style={s.dataCardSub}>Incoming ↑</Text>
-          <MiniSparkline values={tideMini} color={Colors.brackishWater}/>
+          <Text style={[s.dataCardVal, { color: Colors.brackishWater }]}>
+            {curTide !== null ? `${curTide.toFixed(2)} ft` : '—'}
+          </Text>
+          <Text style={s.dataCardSub}>
+            {curTide !== null ? (tideRising ? 'Incoming ↑' : 'Outgoing ↓') : 'Loading…'}
+          </Text>
+          <MiniSparkline values={tideSpark} color={Colors.brackishWater}/>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -309,16 +360,24 @@ export default function DashboardScreen({ navigation }) {
 
         <TouchableOpacity style={[s.dataCard, s.dataCardGreen]} activeOpacity={0.8}>
           <Text style={s.dataCardLabel}>WEATHER</Text>
-          <Text style={[s.dataCardVal, { color: Colors.marshGreen }]}>82°F</Text>
-          <Text style={s.dataCardSub}>Low 74°</Text>
-          <MiniSparkline values={tempMini} color={Colors.marshGreen}/>
+          <Text style={[s.dataCardVal, { color: Colors.marshGreen }]}>
+            {airTemp !== null ? `${airTemp}°F` : '—'}
+          </Text>
+          <Text style={s.dataCardSub}>
+            {todayLow != null ? `Low ${Math.round(todayLow)}°` : 'Loading…'}
+          </Text>
+          <MiniSparkline values={tempSpark} color={Colors.marshGreen}/>
         </TouchableOpacity>
 
         <TouchableOpacity style={[s.dataCard, s.dataCardNavy]} activeOpacity={0.8}>
           <Text style={s.dataCardLabel}>WAVES</Text>
-          <Text style={[s.dataCardVal, { color: Colors.midnightTide }]}>1.8 ft</Text>
-          <Text style={s.dataCardSub}>SSE swell</Text>
-          <MiniSparkline values={waveMini} color={Colors.midnightTide}/>
+          <Text style={[s.dataCardVal, { color: Colors.midnightTide }]}>
+            {waveHt !== null ? `${waveHt} ft` : '—'}
+          </Text>
+          <Text style={s.dataCardSub}>
+            {waveHt !== null ? `${waveDirStr} swell` : 'Loading…'}
+          </Text>
+          <MiniSparkline values={waveSpark} color={Colors.midnightTide}/>
         </TouchableOpacity>
       </View>
 
@@ -326,10 +385,9 @@ export default function DashboardScreen({ navigation }) {
       <View style={s.section}>
         <View style={s.sectionHd}>
           <Text style={s.sectionTitle}>7-day forecast</Text>
-          <TouchableOpacity><Text style={s.seeAll}>Full forecast ›</Text></TouchableOpacity>
         </View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          {FORECAST.map((f, i) => (
+          {forecast.map((f, i) => (
             <View key={i} style={[s.fcCard, f.today && s.fcCardToday]}>
               <Text style={[s.fcDay, f.today && s.fcDayToday]}>{f.day}</Text>
               <Text style={s.fcIco}>{f.ico}</Text>
@@ -339,39 +397,6 @@ export default function DashboardScreen({ navigation }) {
             </View>
           ))}
         </ScrollView>
-      </View>
-
-      {/* ── RECENT REPORTS ─────────────────────────────────── */}
-      <View style={s.section}>
-        <View style={s.sectionHd}>
-          <Text style={s.sectionTitle}>Recent catch reports</Text>
-          <TouchableOpacity onPress={() => navigation.navigate('Reports')}>
-            <Text style={s.seeAll}>See all ›</Text>
-          </TouchableOpacity>
-        </View>
-
-        {MOCK_REPORTS.map((r, i) => (
-          <View key={i} style={s.reportCard}>
-            <View style={s.reportHd}>
-              <View style={s.avatar}>
-                <Text style={s.avatarTxt}>{r.initials}</Text>
-              </View>
-              <View style={s.reportMeta}>
-                <Text style={s.reportName}>{r.name} · {r.time}</Text>
-                <Text style={s.reportLoc}>📍 {r.loc}</Text>
-              </View>
-              <Text style={s.stars}>{r.stars}</Text>
-            </View>
-            <View style={s.speciesRow}>
-              {r.species.map((sp, j) => (
-                <View key={j} style={s.chip}>
-                  <Text style={s.chipTxt}>{sp}</Text>
-                </View>
-              ))}
-            </View>
-            <Text style={s.reportNote}>{r.note}</Text>
-          </View>
-        ))}
       </View>
 
     </ScrollView>
@@ -437,7 +462,6 @@ const s = StyleSheet.create({
   section:     { paddingHorizontal: Spacing.lg, marginBottom: Spacing.lg },
   sectionHd:   { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: Spacing.sm },
   sectionTitle:{ fontSize: Typography.base, fontWeight: '600', color: Colors.textPrimary },
-  seeAll:      { fontSize: Typography.sm, color: Colors.brackishWater },
   fcCard:      { width: 72, marginRight: 8, backgroundColor: Colors.cardBg, borderRadius: Radius.md, borderWidth: 0.5, borderColor: Colors.border, padding: 8, alignItems: 'center', gap: 2 },
   fcCardToday: { borderColor: Colors.doubloonGold, backgroundColor: 'rgba(196,154,42,0.06)' },
   fcDay:       { fontSize: Typography.xs, color: Colors.textSecondary },
@@ -446,18 +470,4 @@ const s = StyleSheet.create({
   fcHigh:      { fontSize: Typography.sm, fontWeight: '700', color: Colors.textPrimary },
   fcLow:       { fontSize: Typography.xs, color: Colors.textSecondary },
   fcWind:      { fontSize: 9, color: Colors.textSecondary },
-
-  // Reports
-  reportCard:  { backgroundColor: Colors.cardBg, borderRadius: Radius.lg, borderWidth: 0.5, borderColor: Colors.border, padding: Spacing.md, marginBottom: Spacing.sm },
-  reportHd:    { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 8, gap: 10 },
-  avatar:      { width: 34, height: 34, borderRadius: 17, backgroundColor: '#D0E4EE', alignItems: 'center', justifyContent: 'center' },
-  avatarTxt:   { fontSize: Typography.sm, fontWeight: '700', color: Colors.deepSea },
-  reportMeta:  { flex: 1 },
-  reportName:  { fontSize: Typography.sm, fontWeight: '600', color: Colors.textPrimary },
-  reportLoc:   { fontSize: Typography.xs, color: Colors.textSecondary, marginTop: 1 },
-  stars:       { fontSize: Typography.sm, color: Colors.doubloonGold },
-  speciesRow:  { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginBottom: 6 },
-  chip:        { backgroundColor: '#D0E4EE', borderRadius: Radius.full, paddingHorizontal: 8, paddingVertical: 2 },
-  chipTxt:     { fontSize: Typography.xs, color: Colors.deepSea, fontWeight: '500' },
-  reportNote:  { fontSize: Typography.xs, color: Colors.textSecondary },
 })
