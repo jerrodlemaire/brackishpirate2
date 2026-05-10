@@ -3,6 +3,7 @@ import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   Dimensions, PanResponder, Modal,
 } from 'react-native'
+import Svg, { Path, Defs, LinearGradient, Stop } from 'react-native-svg'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import * as Haptics from 'expo-haptics'
 import { Colors, Typography, Spacing, Radius } from '../../constants/theme'
@@ -30,13 +31,41 @@ function addDays(date, n) {
 }
 function isSameDay(a, b) { return a.toDateString() === b.toDateString() }
 
-// ── Solunar chart ─────────────────────────────────────────────────────────────
+// ── Bezier helpers ────────────────────────────────────────────────────────────
+function smoothBezierPath(pts) {
+  if (pts.length < 2) return ''
+  const t = 0.35
+  let d = `M ${pts[0].x.toFixed(1)},${pts[0].y.toFixed(1)}`
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[Math.max(0, i - 1)]
+    const p1 = pts[i]
+    const p2 = pts[i + 1]
+    const p3 = pts[Math.min(pts.length - 1, i + 2)]
+    const cp1x = p1.x + (p2.x - p0.x) * t
+    const cp1y = p1.y + (p2.y - p0.y) * t
+    const cp2x = p2.x - (p3.x - p1.x) * t
+    const cp2y = p2.y - (p3.y - p1.y) * t
+    d += ` C ${cp1x.toFixed(1)},${cp1y.toFixed(1)} ${cp2x.toFixed(1)},${cp2y.toFixed(1)} ${p2.x.toFixed(1)},${p2.y.toFixed(1)}`
+  }
+  return d
+}
+
+function smoothAreaPath(pts, bottomY) {
+  if (pts.length === 0) return ''
+  const line  = smoothBezierPath(pts)
+  const last  = pts[pts.length - 1]
+  const first = pts[0]
+  return `${line} L ${last.x.toFixed(1)},${bottomY.toFixed(1)} L ${first.x.toFixed(1)},${bottomY.toFixed(1)} Z`
+}
+
+// ── Solunar chart (bezier SVG) ────────────────────────────────────────────────
 function SolunarChart({ sol }) {
   const [scrubIdx, setScrubIdx] = useState(null)
   const lastHaptic              = useRef(-1)
 
   const curve = buildActivityCurve(sol)
   const stepX = PLOT_W / (curve.length - 1)
+  const toY   = (v) => PAD_T + PLOT_H - (v / 100) * PLOT_H
 
   const getIdx = (x) => {
     const rel = x - PAD_L
@@ -63,9 +92,10 @@ function SolunarChart({ sol }) {
     onPanResponderRelease: () => { setTimeout(() => setScrubIdx(null), 2500) },
   })
 
-  const toY = (v) => PAD_T + PLOT_H - (v / 100) * PLOT_H
-
   const pts = curve.map((v, i) => ({ x: PAD_L + i * stepX, y: toY(v), v }))
+
+  const linePath = smoothBezierPath(pts)
+  const areaPath = smoothAreaPath(pts, CHART_H - PAD_B)
 
   const nowX  = PAD_L + Math.min(new Date().getHours(), curve.length - 1) * stepX
   const scrub = scrubIdx !== null ? pts[scrubIdx] : null
@@ -79,51 +109,40 @@ function SolunarChart({ sol }) {
 
   return (
     <View style={gc.wrap} {...pan.panHandlers}>
+      <Svg width={CHART_W} height={CHART_H} style={StyleSheet.absoluteFillObject}>
+        <Defs>
+          <LinearGradient id="solGrad" x1="0" y1="0" x2="0" y2="1">
+            <Stop offset="0" stopColor={Colors.doubloonGold} stopOpacity="0.45"/>
+            <Stop offset="1" stopColor={Colors.doubloonGold} stopOpacity="0.02"/>
+          </LinearGradient>
+        </Defs>
+        {/* Subtle window bands */}
+        {windows.map((w, i) => {
+          const x1 = PAD_L + (w.startH / 24) * PLOT_W
+          const x2 = PAD_L + (Math.min(w.endH, 24) / 24) * PLOT_W
+          return (
+            <Path key={i}
+              d={`M ${x1.toFixed(1)},${PAD_T} L ${x2.toFixed(1)},${PAD_T} L ${x2.toFixed(1)},${CHART_H - PAD_B} L ${x1.toFixed(1)},${CHART_H - PAD_B} Z`}
+              fill={w.major ? 'rgba(196,154,42,0.14)' : 'rgba(196,154,42,0.07)'}
+            />
+          )
+        })}
+        {/* Grid lines */}
+        {[0, 25, 50, 75, 100].map((v, i) => (
+          <Path key={i}
+            d={`M ${PAD_L},${toY(v).toFixed(1)} L ${CHART_W - PAD_R},${toY(v).toFixed(1)}`}
+            stroke="rgba(196,154,42,0.15)" strokeWidth="0.5"/>
+        ))}
+        {/* Gradient area */}
+        <Path d={areaPath} fill="url(#solGrad)"/>
+        {/* Bezier line */}
+        <Path d={linePath} fill="none" stroke={Colors.doubloonGold} strokeWidth="2.5"
+          strokeLinecap="round" strokeLinejoin="round"/>
+      </Svg>
 
-      {/* Window bands */}
-      {windows.map((w, i) => {
-        const x1 = PAD_L + (w.startH / 24) * PLOT_W
-        const x2 = PAD_L + (Math.min(w.endH, 24) / 24) * PLOT_W
-        return (
-          <View key={i} style={{
-            position: 'absolute', left: x1, top: PAD_T,
-            width: Math.max(0, x2 - x1), height: PLOT_H,
-            backgroundColor: w.major ? 'rgba(196,154,42,0.14)' : 'rgba(196,154,42,0.07)',
-            borderLeftWidth: 0.5, borderLeftColor: Colors.doubloonGold,
-          }}/>
-        )
-      })}
-
-      {/* Grid */}
-      {[0, 25, 50, 75, 100].map((v, i) => (
-        <View key={i} style={[gc.grid, { top: toY(v) }]}>
-          <Text style={gc.gridLbl}>{v}</Text>
-        </View>
-      ))}
-
-      {/* Area bars */}
-      {pts.map((pt, i) => {
-        if (i === pts.length - 1) return null
-        const next = pts[i + 1]
-        const avgY = (pt.y + next.y) / 2
-        return (
-          <View key={i} style={{
-            position: 'absolute', left: pt.x, top: avgY,
-            width: stepX + 0.5,
-            height: Math.max(0, CHART_H - PAD_B - avgY),
-            backgroundColor: scrubIdx === i
-              ? 'rgba(196,154,42,0.5)' : 'rgba(196,154,42,0.22)',
-          }}/>
-        )
-      })}
-
-      {/* Dots */}
-      {pts.map((pt, i) => (
-        <View key={i} style={[
-          gc.dot,
-          { left: pt.x - 2, top: pt.y - 2 },
-          scrubIdx === i && gc.dotActive,
-        ]}/>
+      {/* Y-axis labels */}
+      {[0, 50, 100].map((v, i) => (
+        <Text key={i} style={[gc.gridLbl, { top: toY(v) - 6 }]}>{v}</Text>
       ))}
 
       {/* NOW line */}
@@ -162,10 +181,7 @@ function SolunarChart({ sol }) {
 
 const gc = StyleSheet.create({
   wrap:       { height: CHART_H, width: CHART_W, position: 'relative', marginBottom: 4 },
-  grid:       { position: 'absolute', left: 0, right: PAD_R, height: 0.5, backgroundColor: 'rgba(196,154,42,0.2)', flexDirection: 'row', alignItems: 'center' },
-  gridLbl:    { position: 'absolute', left: 0, fontSize: 9, color: Colors.textMuted, width: PAD_L - 4, textAlign: 'right' },
-  dot:        { position: 'absolute', width: 4, height: 4, borderRadius: 2, backgroundColor: Colors.doubloonGold },
-  dotActive:  { width: 10, height: 10, borderRadius: 5, borderWidth: 2, borderColor: '#fff', marginLeft: -3, marginTop: -3 },
+  gridLbl:    { position: 'absolute', left: 0, width: PAD_L - 4, textAlign: 'right', fontSize: 9, color: Colors.textMuted },
   nowLine:    { position: 'absolute', top: PAD_T, bottom: PAD_B, width: 1.5, backgroundColor: Colors.brackishWater },
   nowLbl:     { position: 'absolute', top: -14, left: -12, fontSize: 8, color: Colors.brackishWater, fontWeight: '700' },
   scrubLine:  { position: 'absolute', top: PAD_T, bottom: PAD_B, width: 1.5, backgroundColor: Colors.doubloonGold, opacity: 0.9 },
@@ -180,7 +196,6 @@ const gc = StyleSheet.create({
 function DayStrip({ selectedDate, onSelect }) {
   const today = new Date()
   const days  = Array.from({ length: 10 }, (_, i) => addDays(today, i))
-
   return (
     <ScrollView horizontal showsHorizontalScrollIndicator={false}
       style={ds.scroll} contentContainerStyle={ds.content}>
@@ -189,8 +204,7 @@ function DayStrip({ selectedDate, onSelect }) {
         const selected = isSameDay(day, selectedDate)
         const todayDay = isSameDay(day, today)
         return (
-          <TouchableOpacity
-            key={i}
+          <TouchableOpacity key={i}
             style={[ds.pill, selected && ds.pillSelected, todayDay && !selected && ds.pillToday]}
             onPress={() => onSelect(day)}
           >
@@ -225,8 +239,8 @@ const ds = StyleSheet.create({
 // ── Screen ────────────────────────────────────────────────────────────────────
 export default function SolunarScreen({ navigation }) {
   const insets = useSafeAreaInsets()
-  const [selectedDate,  setSelectedDate] = useState(new Date())
-  const [showCalendar,  setShowCalendar] = useState(false)
+  const [selectedDate, setSelectedDate] = useState(new Date())
+  const [showCalendar, setShowCalendar] = useState(false)
 
   const sol   = getSolunarForDate(selectedDate)
   const sun   = getSunTimes()
@@ -244,10 +258,7 @@ export default function SolunarScreen({ navigation }) {
         </TouchableOpacity>
         <Text style={s.topbarTitle}>Solunar</Text>
         <View style={s.topbarRight}>
-          <TouchableOpacity
-            style={s.homePortChip}
-            onPress={() => navigation.navigate('Dashboard')}
-          >
+          <TouchableOpacity style={s.homePortChip} onPress={() => navigation.navigate('Dashboard')}>
             <JollyRoger size={13} flagColor={Colors.doubloonGold} boneColor={Colors.deepSea}/>
             <Text style={s.homePortTxt}>Home Port</Text>
           </TouchableOpacity>
@@ -263,7 +274,7 @@ export default function SolunarScreen({ navigation }) {
       {/* ── SCROLLABLE CONTENT ──────────────────────── */}
       <ScrollView contentContainerStyle={s.content}>
 
-        {/* Hero */}
+        {/* Compact hero */}
         <View style={s.heroCard}>
           <View style={s.heroLeft}>
             <Text style={s.heroLabel}>Activity score</Text>
@@ -334,9 +345,9 @@ export default function SolunarScreen({ navigation }) {
         {/* Sun row */}
         <View style={s.sunRow}>
           {[
-            { icon: '🌅', label: 'Sunrise',     val: sun.sunrise },
-            { icon: '🌇', label: 'Sunset',       val: sun.sunset },
-            { icon: '🌕', label: 'Illumination', val: `${sol.illumination}%` },
+            { icon: '🌅', label: 'Sunrise',      val: sun.sunrise },
+            { icon: '🌇', label: 'Sunset',        val: sun.sunset },
+            { icon: '🌕', label: 'Illumination',  val: `${sol.illumination}%` },
           ].map((c, i) => (
             <View key={i} style={s.sunCard}>
               <Text style={s.sunIcon}>{c.icon}</Text>
@@ -362,7 +373,7 @@ export default function SolunarScreen({ navigation }) {
           ))}
         </View>
 
-        {/* Solunar science */}
+        {/* Science blurb */}
         <View style={s.card}>
           <Text style={s.cardTitle}>About solunar theory</Text>
           <Text style={s.scienceTxt}>
@@ -372,7 +383,6 @@ export default function SolunarScreen({ navigation }) {
             moon rises or sets. Peak activity typically aligns with a rising or full moon.
           </Text>
         </View>
-
       </ScrollView>
 
       {/* Calendar modal */}
@@ -399,32 +409,30 @@ const s = StyleSheet.create({
   calBtn:       { padding: 4 },
   calBtnTxt:    { fontSize: 18 },
 
-  // Content
   content: { padding: Spacing.lg, gap: Spacing.md, paddingBottom: 32 },
 
-  // Hero
-  heroCard:       { backgroundColor: Colors.deepSea, borderRadius: Radius.lg, padding: Spacing.lg, flexDirection: 'row', alignItems: 'flex-start' },
+  // Compact hero (≈30% smaller)
+  heroCard:       { backgroundColor: Colors.deepSea, borderRadius: Radius.lg, padding: 12, flexDirection: 'row', alignItems: 'flex-start' },
   heroLeft:       { flex: 1 },
-  heroLabel:      { fontSize: Typography.sm, color: 'rgba(255,255,255,0.65)', marginBottom: 4 },
+  heroLabel:      { fontSize: Typography.xs, color: 'rgba(255,255,255,0.6)', marginBottom: 2 },
   heroScoreRow:   { flexDirection: 'row', alignItems: 'flex-end', gap: 4 },
-  heroScore:      { fontSize: 44, fontWeight: '700', fontFamily: 'Georgia', lineHeight: 48 },
-  heroScoreDenom: { fontSize: Typography.md, color: 'rgba(255,255,255,0.5)', marginBottom: 8 },
-  heroScoreLabel: { fontSize: Typography.base, color: Colors.saltWhite, marginTop: 4, marginBottom: 10 },
-  scoreBar:       { height: 5, backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 3, overflow: 'hidden' },
-  scoreBarFill:   { height: '100%', borderRadius: 3 },
-  heroRight:      { gap: 10, alignItems: 'flex-end', marginLeft: 12 },
-  heroBox:        { backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: Radius.md, padding: 10, alignItems: 'center', minWidth: 60 },
-  heroBoxLabel:   { fontSize: 9, color: 'rgba(255,255,255,0.5)', marginBottom: 3, letterSpacing: 0.3 },
-  heroBoxEmoji:   { fontSize: 22, lineHeight: 28 },
-  heroBoxVal:     { fontSize: Typography.xl, fontWeight: '700', color: Colors.doubloonGold },
-  heroBoxSub:     { fontSize: Typography.xs, color: 'rgba(255,255,255,0.5)', marginTop: 2 },
+  heroScore:      { fontSize: 32, fontWeight: '700', fontFamily: 'Georgia', lineHeight: 36 },
+  heroScoreDenom: { fontSize: Typography.sm, color: 'rgba(255,255,255,0.5)', marginBottom: 4 },
+  heroScoreLabel: { fontSize: Typography.sm, color: Colors.saltWhite, marginTop: 3, marginBottom: 8 },
+  scoreBar:       { height: 4, backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 2, overflow: 'hidden' },
+  scoreBarFill:   { height: '100%', borderRadius: 2 },
+  heroRight:      { gap: 8, alignItems: 'flex-end', marginLeft: 12 },
+  heroBox:        { backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: Radius.md, paddingHorizontal: 10, paddingVertical: 7, alignItems: 'center', minWidth: 60 },
+  heroBoxLabel:   { fontSize: 9, color: 'rgba(255,255,255,0.5)', marginBottom: 2, letterSpacing: 0.3 },
+  heroBoxEmoji:   { fontSize: 20, lineHeight: 24 },
+  heroBoxVal:     { fontSize: Typography.lg, fontWeight: '700', color: Colors.doubloonGold },
+  heroBoxSub:     { fontSize: Typography.xs, color: 'rgba(255,255,255,0.5)', marginTop: 1 },
 
   // Cards
   card:     { backgroundColor: Colors.cardBg, borderRadius: Radius.lg, borderWidth: 0.5, borderColor: Colors.border, padding: Spacing.lg },
   cardTitle:{ fontSize: Typography.base, fontWeight: '600', color: Colors.textPrimary, marginBottom: 2 },
   cardSub:  { fontSize: Typography.xs, color: Colors.textMuted, marginBottom: 14 },
 
-  // Moon
   moonCard: { backgroundColor: 'rgba(196,154,42,0.06)', borderRadius: Radius.lg, borderWidth: 0.5, borderColor: 'rgba(196,154,42,0.25)', padding: Spacing.lg, flexDirection: 'row', alignItems: 'center', gap: 14 },
   moonEmoji:{ fontSize: 50 },
   moonInfo: { flex: 1 },
@@ -432,7 +440,6 @@ const s = StyleSheet.create({
   moonSub:  { fontSize: Typography.sm, color: Colors.textSecondary, marginTop: 2 },
   moonDays: { fontSize: Typography.sm, color: Colors.doubloonGold, marginTop: 6, fontWeight: '500' },
 
-  // Feeding windows
   solGrid:      { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: Spacing.sm },
   solCard:      { flex: 1, minWidth: '45%', backgroundColor: Colors.saltWhite, borderRadius: Radius.md, borderWidth: 0.5, borderColor: Colors.border, padding: 12 },
   solCardMajor: { borderColor: Colors.doubloonGold, backgroundColor: 'rgba(196,154,42,0.05)' },
@@ -441,14 +448,12 @@ const s = StyleSheet.create({
   solTime:      { fontSize: Typography.md, fontWeight: '700', color: Colors.textPrimary },
   solDur:       { fontSize: Typography.xs, color: Colors.doubloonGold, marginTop: 3 },
 
-  // Sun row
   sunRow:   { flexDirection: 'row', gap: 8 },
   sunCard:  { flex: 1, backgroundColor: Colors.cardBg, borderRadius: Radius.md, borderWidth: 0.5, borderColor: Colors.border, padding: 12, alignItems: 'center', gap: 4 },
   sunIcon:  { fontSize: 22 },
   sunLabel: { fontSize: Typography.xs, color: Colors.textSecondary },
   sunVal:   { fontSize: Typography.base, fontWeight: '700', color: Colors.textPrimary },
 
-  // Best times
   bestRow:   { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 9, borderBottomWidth: 0.5, borderBottomColor: Colors.border },
   bestLabel: { fontSize: Typography.sm, fontWeight: '500', color: Colors.textPrimary },
   bestDetail:{ fontSize: Typography.sm, color: Colors.textSecondary },

@@ -4,6 +4,7 @@ import { NavigationContainer } from '@react-navigation/native'
 import { StatusBar } from 'expo-status-bar'
 import { View, ActivityIndicator, StyleSheet } from 'react-native'
 import { AuthProvider, useAuth } from './src/hooks/useAuth'
+import { AppProvider } from './src/context/AppContext'
 import AppNavigator from './src/navigation/AppNavigator'
 import LoginScreen from './src/screens/auth/LoginScreen'
 import { Colors } from './src/constants/theme'
@@ -23,10 +24,12 @@ function RootRouter() {
 export default function App() {
   return (
     <AuthProvider>
-      <NavigationContainer>
-        <StatusBar style="light"/>
-        <RootRouter />
-      </NavigationContainer>
+      <AppProvider>
+        <NavigationContainer>
+          <StatusBar style="light"/>
+          <RootRouter />
+        </NavigationContainer>
+      </AppProvider>
     </AuthProvider>
   )
 }

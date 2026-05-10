@@ -3,11 +3,13 @@ import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   ActivityIndicator, RefreshControl, Dimensions, PanResponder, Modal,
 } from 'react-native'
+import Svg, { Path, Defs, LinearGradient, Stop } from 'react-native-svg'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import * as Haptics from 'expo-haptics'
 import { Colors, Typography, Spacing, Radius } from '../../constants/theme'
 import { fetchTideHourly, fetchTideHiLo } from '../../utils/tides'
 import { getSolunarForDate, scoreColor } from '../../utils/solunar'
+import { useApp } from '../../context/AppContext'
 import JollyRoger from '../../components/JollyRoger'
 import TidesCalendar from '../../components/TidesCalendar'
 
@@ -21,15 +23,39 @@ const PAD_B   = 28
 const PLOT_W  = CHART_W - PAD_L - PAD_R
 const PLOT_H  = CHART_H - PAD_T - PAD_B
 
-const STATION_NAME = 'Grand Isle, LA'
-
 function addDays(date, n) {
   const d = new Date(date)
   d.setDate(d.getDate() + n)
   return d
 }
 function isSameDay(a, b) { return a.toDateString() === b.toDateString() }
-function formatDateKey(d) { return d.toISOString().slice(0, 10) }
+
+// ── Bezier helpers ────────────────────────────────────────────────────────────
+function smoothBezierPath(pts) {
+  if (pts.length < 2) return ''
+  const t = 0.35
+  let d = `M ${pts[0].x.toFixed(1)},${pts[0].y.toFixed(1)}`
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[Math.max(0, i - 1)]
+    const p1 = pts[i]
+    const p2 = pts[i + 1]
+    const p3 = pts[Math.min(pts.length - 1, i + 2)]
+    const cp1x = p1.x + (p2.x - p0.x) * t
+    const cp1y = p1.y + (p2.y - p0.y) * t
+    const cp2x = p2.x - (p3.x - p1.x) * t
+    const cp2y = p2.y - (p3.y - p1.y) * t
+    d += ` C ${cp1x.toFixed(1)},${cp1y.toFixed(1)} ${cp2x.toFixed(1)},${cp2y.toFixed(1)} ${p2.x.toFixed(1)},${p2.y.toFixed(1)}`
+  }
+  return d
+}
+
+function smoothAreaPath(pts, bottomY) {
+  if (pts.length === 0) return ''
+  const line  = smoothBezierPath(pts)
+  const last  = pts[pts.length - 1]
+  const first = pts[0]
+  return `${line} L ${last.x.toFixed(1)},${bottomY.toFixed(1)} L ${first.x.toFixed(1)},${bottomY.toFixed(1)} Z`
+}
 
 // ── Tide chart ────────────────────────────────────────────────────────────────
 function TideChart({ hourlyData }) {
@@ -82,47 +108,51 @@ function TideChart({ hourlyData }) {
     t: hourlyData[i]?.t?.split(' ')[1] || '',
   }))
 
+  const linePath = smoothBezierPath(pts)
+  const areaPath = smoothAreaPath(pts, CHART_H - PAD_B)
+
   const nowX  = PAD_L + Math.min(new Date().getHours(), values.length - 1) * stepX
   const scrub = scrubIdx !== null ? pts[scrubIdx] : null
 
-  // Determine rising/falling at scrub point
   const direction = scrub && scrubIdx > 0
     ? pts[scrubIdx].v > pts[scrubIdx - 1].v ? '↑ Rising' : '↓ Falling'
     : ''
 
+  const gridVals = [minVal, minVal + range * 0.25, minVal + range * 0.5, minVal + range * 0.75, maxVal]
+
   return (
     <View style={tc.wrap} {...pan.panHandlers}>
-      {/* Grid lines */}
-      {[0, 0.25, 0.5, 0.75, 1].map((f, i) => (
-        <View key={i} style={[tc.grid, { top: PAD_T + PLOT_H * (1 - f) }]}>
-          <Text style={tc.gridLbl}>{(minVal + range * f).toFixed(1)}</Text>
-        </View>
-      ))}
+      <Svg width={CHART_W} height={CHART_H} style={StyleSheet.absoluteFillObject}>
+        <Defs>
+          <LinearGradient id="tideGrad" x1="0" y1="0" x2="0" y2="1">
+            <Stop offset="0" stopColor={Colors.brackishWater} stopOpacity="0.45"/>
+            <Stop offset="1" stopColor={Colors.brackishWater} stopOpacity="0.03"/>
+          </LinearGradient>
+        </Defs>
+        {/* Grid lines */}
+        {gridVals.map((v, i) => {
+          const y = PAD_T + PLOT_H - ((v - minVal) / range) * PLOT_H
+          return (
+            <Path key={i} d={`M ${PAD_L},${y.toFixed(1)} L ${CHART_W - PAD_R},${y.toFixed(1)}`}
+              stroke="rgba(74,143,168,0.15)" strokeWidth="0.5"/>
+          )
+        })}
+        {/* Area fill */}
+        <Path d={areaPath} fill="url(#tideGrad)"/>
+        {/* Smooth bezier line */}
+        <Path d={linePath} fill="none" stroke={Colors.brackishWater} strokeWidth="2.5"
+          strokeLinecap="round" strokeLinejoin="round"/>
+      </Svg>
 
-      {/* Area fill (bars) */}
-      {pts.map((pt, i) => {
-        if (i === pts.length - 1) return null
-        const next = pts[i + 1]
-        const avgY = (pt.y + next.y) / 2
+      {/* Y-axis labels */}
+      {gridVals.map((v, i) => {
+        const y = PAD_T + PLOT_H - ((v - minVal) / range) * PLOT_H
         return (
-          <View key={i} style={{
-            position: 'absolute', left: pt.x, top: avgY,
-            width: stepX + 0.5,
-            height: Math.max(0, CHART_H - PAD_B - avgY),
-            backgroundColor: scrubIdx === i
-              ? 'rgba(74,143,168,0.45)' : 'rgba(74,143,168,0.18)',
-          }}/>
+          <Text key={i} style={[tc.gridLbl, { top: y - 6 }]}>
+            {v.toFixed(1)}
+          </Text>
         )
       })}
-
-      {/* Dots */}
-      {pts.map((pt, i) => (
-        <View key={i} style={[
-          tc.dot,
-          { left: pt.x - 2, top: pt.y - 2 },
-          scrubIdx === i && tc.dotActive,
-        ]}/>
-      ))}
 
       {/* NOW line */}
       <View style={[tc.nowLine, { left: nowX }]}>
@@ -134,8 +164,8 @@ function TideChart({ hourlyData }) {
         <>
           <View style={[tc.scrubLine, { left: scrub.x }]}/>
           <View style={[tc.bubble, {
-            left: Math.min(Math.max(scrub.x - 40, PAD_L), CHART_W - PAD_R - 110),
-            top: scrub.y - 46,
+            left: Math.min(Math.max(scrub.x - 50, PAD_L), CHART_W - PAD_R - 110),
+            top: scrub.y - 48,
           }]}>
             <Text style={tc.bubbleVal}>{scrub.v.toFixed(2)} ft</Text>
             <Text style={tc.bubbleTime}>{scrub.t} {direction}</Text>
@@ -160,11 +190,8 @@ function TideChart({ hourlyData }) {
 
 const tc = StyleSheet.create({
   wrap:      { height: CHART_H, width: CHART_W, position: 'relative', marginBottom: 4 },
-  grid:      { position: 'absolute', left: 0, right: PAD_R, height: 0.5, backgroundColor: 'rgba(74,143,168,0.2)', flexDirection: 'row', alignItems: 'center' },
-  gridLbl:   { position: 'absolute', left: 0, fontSize: 9, color: Colors.textMuted, width: PAD_L - 4, textAlign: 'right' },
-  dot:       { position: 'absolute', width: 4, height: 4, borderRadius: 2, backgroundColor: Colors.brackishWater },
-  dotActive: { width: 10, height: 10, borderRadius: 5, borderWidth: 2, borderColor: '#fff', marginLeft: -3, marginTop: -3 },
-  nowLine:   { position: 'absolute', top: PAD_T, bottom: PAD_B, width: 1.5, backgroundColor: Colors.doubloonGold, borderStyle: 'dashed' },
+  gridLbl:   { position: 'absolute', left: 0, width: PAD_L - 4, textAlign: 'right', fontSize: 9, color: Colors.textMuted },
+  nowLine:   { position: 'absolute', top: PAD_T, bottom: PAD_B, width: 1.5, backgroundColor: Colors.doubloonGold },
   nowLbl:    { position: 'absolute', top: -14, left: -12, fontSize: 8, color: Colors.doubloonGold, fontWeight: '700' },
   scrubLine: { position: 'absolute', top: PAD_T, bottom: PAD_B, width: 1.5, backgroundColor: Colors.brackishWater, opacity: 0.8 },
   bubble:    { position: 'absolute', backgroundColor: Colors.brackishWater, borderRadius: Radius.md, paddingHorizontal: 10, paddingVertical: 6, minWidth: 100, alignItems: 'center' },
@@ -178,7 +205,6 @@ const tc = StyleSheet.create({
 function DayStrip({ selectedDate, onSelect }) {
   const today = new Date()
   const days  = Array.from({ length: 10 }, (_, i) => addDays(today, i))
-
   return (
     <ScrollView horizontal showsHorizontalScrollIndicator={false} style={ds.scroll}
       contentContainerStyle={ds.content}>
@@ -187,8 +213,7 @@ function DayStrip({ selectedDate, onSelect }) {
         const selected = isSameDay(day, selectedDate)
         const todayDay = isSameDay(day, today)
         return (
-          <TouchableOpacity
-            key={i}
+          <TouchableOpacity key={i}
             style={[ds.pill, selected && ds.pillSelected, todayDay && !selected && ds.pillToday]}
             onPress={() => onSelect(day)}
           >
@@ -223,16 +248,20 @@ const ds = StyleSheet.create({
 // ── Screen ────────────────────────────────────────────────────────────────────
 export default function TidesScreen({ navigation }) {
   const insets = useSafeAreaInsets()
-  const [selectedDate,  setSelectedDate] = useState(new Date())
-  const [hourly,        setHourly]       = useState([])
-  const [hiLo,          setHiLo]         = useState([])
-  const [loading,       setLoading]      = useState(true)
-  const [refreshing,    setRefreshing]   = useState(false)
-  const [showCalendar,  setShowCalendar] = useState(false)
+  const { activeStation } = useApp()
+  const [selectedDate, setSelectedDate] = useState(new Date())
+  const [hourly,       setHourly]       = useState([])
+  const [hiLo,         setHiLo]         = useState([])
+  const [loading,      setLoading]      = useState(true)
+  const [refreshing,   setRefreshing]   = useState(false)
+  const [showCalendar, setShowCalendar] = useState(false)
 
   const loadData = useCallback(async (date) => {
     try {
-      const [h, hl] = await Promise.all([fetchTideHourly(date), fetchTideHiLo(date)])
+      const [h, hl] = await Promise.all([
+        fetchTideHourly(date, activeStation.id),
+        fetchTideHiLo(date, activeStation.id),
+      ])
       setHourly(h)
       setHiLo(hl)
     } catch (e) {
@@ -241,20 +270,17 @@ export default function TidesScreen({ navigation }) {
       setLoading(false)
       setRefreshing(false)
     }
-  }, [])
+  }, [activeStation.id])
 
   useEffect(() => {
     setLoading(true)
     loadData(selectedDate)
   }, [selectedDate, loadData])
 
-  const onRefresh = () => {
-    setRefreshing(true)
-    loadData(selectedDate)
-  }
+  const onRefresh = () => { setRefreshing(true); loadData(selectedDate) }
 
   const nowHour    = new Date().getHours()
-  const currentVal = hourly[nowHour] ? parseFloat(hourly[nowHour].v) : null
+  const currentVal = hourly[nowHour]     ? parseFloat(hourly[nowHour].v)     : null
   const prevVal    = hourly[nowHour - 1] ? parseFloat(hourly[nowHour - 1].v) : null
   const tideDir    = currentVal !== null && prevVal !== null
     ? currentVal > prevVal ? 'Incoming ↑' : 'Outgoing ↓'
@@ -273,10 +299,7 @@ export default function TidesScreen({ navigation }) {
         </TouchableOpacity>
         <Text style={s.topbarTitle}>Tides</Text>
         <View style={s.topbarRight}>
-          <TouchableOpacity
-            style={s.homePortChip}
-            onPress={() => navigation.navigate('Dashboard')}
-          >
+          <TouchableOpacity style={s.homePortChip} onPress={() => navigation.navigate('Dashboard')}>
             <JollyRoger size={13} flagColor="#fff" boneColor={Colors.brackishWater}/>
             <Text style={s.homePortTxt}>Home Port</Text>
           </TouchableOpacity>
@@ -292,41 +315,33 @@ export default function TidesScreen({ navigation }) {
       {/* ── SCROLLABLE CONTENT ──────────────────────── */}
       <ScrollView
         contentContainerStyle={s.content}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.brackishWater}/>
-        }
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.brackishWater}/>}
       >
-        {/* Hero */}
+        {/* Compact hero */}
         <View style={s.heroCard}>
           <View style={s.heroLeft}>
             <Text style={s.heroLabel}>Current tide</Text>
-            <Text style={s.heroVal}>
-              {currentVal !== null ? `${currentVal.toFixed(2)} ft` : '—'}
-            </Text>
+            <Text style={s.heroVal}>{currentVal !== null ? `${currentVal.toFixed(2)} ft` : '—'}</Text>
             <Text style={s.heroDir}>{tideDir}</Text>
           </View>
           <View style={s.heroRight}>
             <View style={s.heroBox}>
               <Text style={s.heroBoxLabel}>Next high</Text>
-              <Text style={s.heroBoxVal}>
-                {nextHighs[0] ? `${parseFloat(nextHighs[0].v).toFixed(1)} ft` : '—'}
-              </Text>
+              <Text style={s.heroBoxVal}>{nextHighs[0] ? `${parseFloat(nextHighs[0].v).toFixed(1)} ft` : '—'}</Text>
               <Text style={s.heroBoxTime}>{nextHighs[0]?.t?.split(' ')[1] || ''}</Text>
             </View>
             <View style={s.heroBox}>
               <Text style={s.heroBoxLabel}>Next low</Text>
-              <Text style={[s.heroBoxVal, { color: Colors.doubloonGold }]}>
-                {nextLows[0] ? `${parseFloat(nextLows[0].v).toFixed(1)} ft` : '—'}
-              </Text>
+              <Text style={[s.heroBoxVal, { color: Colors.doubloonGold }]}>{nextLows[0] ? `${parseFloat(nextLows[0].v).toFixed(1)} ft` : '—'}</Text>
               <Text style={s.heroBoxTime}>{nextLows[0]?.t?.split(' ')[1] || ''}</Text>
             </View>
           </View>
         </View>
 
-        {/* Tide chart */}
+        {/* Chart */}
         <View style={s.card}>
           <Text style={s.cardTitle}>Today's tide chart</Text>
-          <Text style={s.cardSub}>Slide your finger to explore</Text>
+          <Text style={s.cardSub}>Slide your finger to explore · {activeStation.name}</Text>
           {loading
             ? <View style={{ height: CHART_H, alignItems: 'center', justifyContent: 'center' }}>
                 <ActivityIndicator color={Colors.brackishWater}/>
@@ -357,7 +372,7 @@ export default function TidesScreen({ navigation }) {
         <View style={s.infoRow}>
           {[
             { icon: '🌊', label: 'Tidal range', val: hiLo.length >= 2 ? `${Math.abs(parseFloat(hiLo[0].v) - parseFloat(hiLo[1].v)).toFixed(2)} ft` : '—' },
-            { icon: '📍', label: 'Station', val: STATION_NAME },
+            { icon: '📍', label: 'Station', val: activeStation.name },
             { icon: '📐', label: 'Datum', val: 'MLLW' },
           ].map((c, i) => (
             <View key={i} style={s.infoCard}>
@@ -383,7 +398,6 @@ export default function TidesScreen({ navigation }) {
             </View>
           ))}
         </View>
-
       </ScrollView>
 
       {/* Calendar modal */}
@@ -410,20 +424,19 @@ const s = StyleSheet.create({
   calBtn:       { padding: 4 },
   calBtnTxt:    { fontSize: 18 },
 
-  // Content
-  content:  { padding: Spacing.lg, gap: Spacing.md, paddingBottom: 32 },
+  content: { padding: Spacing.lg, gap: Spacing.md, paddingBottom: 32 },
 
-  // Hero
-  heroCard:     { backgroundColor: Colors.deepSea, borderRadius: Radius.lg, padding: Spacing.lg, flexDirection: 'row', alignItems: 'center' },
+  // Compact hero (≈30% smaller padding + font)
+  heroCard:     { backgroundColor: Colors.deepSea, borderRadius: Radius.lg, padding: 12, flexDirection: 'row', alignItems: 'center' },
   heroLeft:     { flex: 1 },
-  heroLabel:    { fontSize: Typography.sm, color: 'rgba(255,255,255,0.65)', marginBottom: 4 },
-  heroVal:      { fontSize: 38, fontWeight: '700', color: Colors.saltWhite, fontFamily: 'Georgia' },
-  heroDir:      { fontSize: Typography.base, color: Colors.brackishWater, marginTop: 4 },
-  heroRight:    { gap: 10, alignItems: 'flex-end' },
-  heroBox:      { backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: Radius.md, padding: 10, alignItems: 'center', minWidth: 70 },
-  heroBoxLabel: { fontSize: 9, color: 'rgba(255,255,255,0.5)', marginBottom: 3, letterSpacing: 0.3 },
-  heroBoxVal:   { fontSize: Typography.md, fontWeight: '700', color: '#fff' },
-  heroBoxTime:  { fontSize: Typography.xs, color: 'rgba(255,255,255,0.5)', marginTop: 2 },
+  heroLabel:    { fontSize: Typography.xs, color: 'rgba(255,255,255,0.6)', marginBottom: 2 },
+  heroVal:      { fontSize: 28, fontWeight: '700', color: Colors.saltWhite, fontFamily: 'Georgia' },
+  heroDir:      { fontSize: Typography.sm, color: Colors.brackishWater, marginTop: 2 },
+  heroRight:    { gap: 8, alignItems: 'flex-end' },
+  heroBox:      { backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: Radius.md, paddingHorizontal: 10, paddingVertical: 7, alignItems: 'center', minWidth: 68 },
+  heroBoxLabel: { fontSize: 9, color: 'rgba(255,255,255,0.5)', marginBottom: 2, letterSpacing: 0.3 },
+  heroBoxVal:   { fontSize: Typography.base, fontWeight: '700', color: '#fff' },
+  heroBoxTime:  { fontSize: Typography.xs, color: 'rgba(255,255,255,0.5)', marginTop: 1 },
 
   // Cards
   card:       { backgroundColor: Colors.cardBg, borderRadius: Radius.lg, borderWidth: 0.5, borderColor: Colors.border, padding: Spacing.lg },

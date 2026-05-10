@@ -17,6 +17,7 @@ function TabIcon({ name, focused }) {
     Dashboard: '⊞',
     Map:       '◎',
     Tides:     '◐',
+    Solunar:   '◑',
     Reports:   '✦',
     Shop:      '⊕',
     Profile:   '◉',
