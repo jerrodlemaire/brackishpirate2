@@ -4,7 +4,7 @@ import {
   TouchableOpacity, ActivityIndicator,
   Dimensions, Modal,
 } from 'react-native'
-import { Colors, Typography, Spacing, Radius } from '../../constants/theme'
+import { Colors, Typography, Spacing, Radius } from '../constants/theme'
 
 const { width } = Dimensions.get('window')
 

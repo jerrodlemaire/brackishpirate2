@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell($env:PATH += \";C:\\\\Program Files\\\\Git\\\\bin\"; cd C:\\\\Projects\\\\brackishpirate2; git remote -v)",
+      "PowerShell(winget install *)",
+      "PowerShell(gh repo *)",
+      "PowerShell(gh auth *)",
+      "PowerShell(Get-Content *)",
+      "PowerShell(Get-ChildItem *)",
+      "PowerShell(git *)",
+      "PowerShell(git add *)"
+    ]
+  }
+}

@@ -77,12 +77,12 @@ export default function AppNavigator() {
       <Tab.Screen
         name="Tides"
         component={TidesScreen}
-        options={{ title: 'Tides & Solunar' }}
+        options={{ title: 'Tides & Solunar', headerShown: false }}
       />
       <Tab.Screen
         name="Solunar"
         component={SolunarScreen}
-        options={{ title: 'Solunar', tabBarLabel: 'Solunar' }}
+        options={{ title: 'Solunar', tabBarLabel: 'Solunar', headerShown: false }}
       />
       <Tab.Screen
         name="Reports"
