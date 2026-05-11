@@ -5,6 +5,7 @@ import { StatusBar } from 'expo-status-bar'
 import { View, ActivityIndicator, StyleSheet } from 'react-native'
 import { AuthProvider, useAuth } from './src/hooks/useAuth'
 import { AppProvider } from './src/context/AppContext'
+import { DataLocationProvider } from './src/hooks/useDataLocation'
 import AppNavigator from './src/navigation/AppNavigator'
 import LoginScreen from './src/screens/auth/LoginScreen'
 import { Colors } from './src/constants/theme'
@@ -25,10 +26,12 @@ export default function App() {
   return (
     <AuthProvider>
       <AppProvider>
-        <NavigationContainer>
-          <StatusBar style="light"/>
-          <RootRouter />
-        </NavigationContainer>
+        <DataLocationProvider>
+          <NavigationContainer>
+            <StatusBar style="light"/>
+            <RootRouter />
+          </NavigationContainer>
+        </DataLocationProvider>
       </AppProvider>
     </AuthProvider>
   )

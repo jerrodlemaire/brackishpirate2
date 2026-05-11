@@ -7,6 +7,8 @@ import DashboardScreen from '../screens/dashboard/DashboardScreen'
 import MapScreen from '../screens/map/MapScreen'
 import TidesScreen from '../screens/tides/TidesScreen'
 import ReportsScreen from '../screens/reports/ReportsScreen'
+import WeatherScreen from '../screens/weather/WeatherScreen'
+import WavesScreen from '../screens/waves/WavesScreen'
 import { ShopScreen, ProfileScreen } from '../screens/StubScreens'
 import SolunarScreen from '../screens/tides/SolunarScreen'
 
@@ -18,6 +20,8 @@ function TabIcon({ name, focused }) {
     Map:       '◎',
     Tides:     '◐',
     Solunar:   '◑',
+    Weather:   '⊙',
+    Waves:     '≈',
     Reports:   '✦',
     Shop:      '⊕',
     Profile:   '◉',
@@ -84,6 +88,16 @@ export default function AppNavigator() {
         name="Solunar"
         component={SolunarScreen}
         options={{ title: 'Solunar', tabBarLabel: 'Solunar', headerShown: false }}
+      />
+      <Tab.Screen
+        name="Weather"
+        component={WeatherScreen}
+        options={{ title: 'Weather', headerShown: false }}
+      />
+      <Tab.Screen
+        name="Waves"
+        component={WavesScreen}
+        options={{ title: 'Waves', headerShown: false }}
       />
       <Tab.Screen
         name="Reports"

@@ -11,7 +11,9 @@ import {
   getSolunarForDate, buildActivityCurve,
   scoreColor, scoreLabel, getSunTimes,
 } from '../../utils/solunar'
-import JollyRoger from '../../components/JollyRoger'
+import { useDataLocation } from '../../hooks/useDataLocation'
+import LocationChip from '../../components/LocationChip'
+import LocationPickerModal from '../../components/LocationPickerModal'
 import TidesCalendar from '../../components/TidesCalendar'
 
 const { width } = Dimensions.get('window')
@@ -116,7 +118,6 @@ function SolunarChart({ sol }) {
             <Stop offset="1" stopColor={Colors.doubloonGold} stopOpacity="0.02"/>
           </LinearGradient>
         </Defs>
-        {/* Subtle window bands */}
         {windows.map((w, i) => {
           const x1 = PAD_L + (w.startH / 24) * PLOT_W
           const x2 = PAD_L + (Math.min(w.endH, 24) / 24) * PLOT_W
@@ -127,30 +128,24 @@ function SolunarChart({ sol }) {
             />
           )
         })}
-        {/* Grid lines */}
         {[0, 25, 50, 75, 100].map((v, i) => (
           <Path key={i}
             d={`M ${PAD_L},${toY(v).toFixed(1)} L ${CHART_W - PAD_R},${toY(v).toFixed(1)}`}
             stroke="rgba(196,154,42,0.15)" strokeWidth="0.5"/>
         ))}
-        {/* Gradient area */}
         <Path d={areaPath} fill="url(#solGrad)"/>
-        {/* Bezier line */}
         <Path d={linePath} fill="none" stroke={Colors.doubloonGold} strokeWidth="2.5"
           strokeLinecap="round" strokeLinejoin="round"/>
       </Svg>
 
-      {/* Y-axis labels */}
       {[0, 50, 100].map((v, i) => (
         <Text key={i} style={[gc.gridLbl, { top: toY(v) - 6 }]}>{v}</Text>
       ))}
 
-      {/* NOW line */}
       <View style={[gc.nowLine, { left: nowX }]}>
         <Text style={gc.nowLbl}>NOW</Text>
       </View>
 
-      {/* Scrub */}
       {scrub && (
         <>
           <View style={[gc.scrubLine, { left: scrub.x }]}/>
@@ -164,7 +159,6 @@ function SolunarChart({ sol }) {
         </>
       )}
 
-      {/* X labels */}
       {['12a', '6a', '12p', '6p', '12a'].map((l, i) => (
         <Text key={i} style={[gc.xLbl, {
           left: PAD_L + (PLOT_W / 4) * i - 8,
@@ -239,8 +233,10 @@ const ds = StyleSheet.create({
 // ── Screen ────────────────────────────────────────────────────────────────────
 export default function SolunarScreen({ navigation }) {
   const insets = useSafeAreaInsets()
-  const [selectedDate, setSelectedDate] = useState(new Date())
-  const [showCalendar, setShowCalendar] = useState(false)
+  const { solunarLocation, setSolunarLocation } = useDataLocation()
+  const [selectedDate,      setSelectedDate]      = useState(new Date())
+  const [showCalendar,      setShowCalendar]      = useState(false)
+  const [showLocationPicker, setShowLocationPicker] = useState(false)
 
   const sol   = getSolunarForDate(selectedDate)
   const sun   = getSunTimes()
@@ -258,10 +254,12 @@ export default function SolunarScreen({ navigation }) {
         </TouchableOpacity>
         <Text style={s.topbarTitle}>Solunar</Text>
         <View style={s.topbarRight}>
-          <TouchableOpacity style={s.homePortChip} onPress={() => navigation.navigate('Dashboard')}>
-            <JollyRoger size={13} flagColor={Colors.doubloonGold} boneColor={Colors.deepSea}/>
-            <Text style={s.homePortTxt}>Home Port</Text>
-          </TouchableOpacity>
+          <LocationChip
+            label={solunarLocation.name}
+            onPress={() => setShowLocationPicker(true)}
+            color={Colors.doubloonGold}
+            boneColor={Colors.deepSea}
+          />
           <TouchableOpacity onPress={() => setShowCalendar(true)} style={s.calBtn}>
             <Text style={s.calBtnTxt}>📅</Text>
           </TouchableOpacity>
@@ -304,7 +302,7 @@ export default function SolunarScreen({ navigation }) {
         {/* Chart */}
         <View style={s.card}>
           <Text style={s.cardTitle}>Solunar activity</Text>
-          <Text style={s.cardSub}>Slide to explore · Gold bands = feeding windows</Text>
+          <Text style={s.cardSub}>Slide to explore · Gold bands = feeding windows · {solunarLocation.name}</Text>
           <SolunarChart sol={sol}/>
         </View>
 
@@ -345,9 +343,9 @@ export default function SolunarScreen({ navigation }) {
         {/* Sun row */}
         <View style={s.sunRow}>
           {[
-            { icon: '🌅', label: 'Sunrise',      val: sun.sunrise },
-            { icon: '🌇', label: 'Sunset',        val: sun.sunset },
-            { icon: '🌕', label: 'Illumination',  val: `${sol.illumination}%` },
+            { icon: '🌅', label: 'Sunrise',     val: sun.sunrise },
+            { icon: '🌇', label: 'Sunset',       val: sun.sunset },
+            { icon: '🌕', label: 'Illumination', val: `${sol.illumination}%` },
           ].map((c, i) => (
             <View key={i} style={s.sunCard}>
               <Text style={s.sunIcon}>{c.icon}</Text>
@@ -391,6 +389,16 @@ export default function SolunarScreen({ navigation }) {
           <TidesCalendar onClose={() => setShowCalendar(false)}/>
         </Modal>
       )}
+
+      {/* Location picker */}
+      <LocationPickerModal
+        visible={showLocationPicker}
+        onClose={() => setShowLocationPicker(false)}
+        onSelect={(lat, lng, name) => setSolunarLocation(lat, lng, name)}
+        title="Set Solunar Location"
+        initialLat={solunarLocation.lat}
+        initialLng={solunarLocation.lng}
+      />
     </View>
   )
 }
@@ -398,20 +406,16 @@ export default function SolunarScreen({ navigation }) {
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.saltWhite },
 
-  // Topbar
   topbar:       { backgroundColor: Colors.deepSea, flexDirection: 'row', alignItems: 'center', paddingHorizontal: Spacing.md, paddingBottom: 12 },
   topbarBack:   { padding: 4, marginRight: 4 },
   topbarBackTxt:{ fontSize: 26, color: '#fff', lineHeight: 30 },
   topbarTitle:  { flex: 1, fontFamily: 'Georgia', fontSize: Typography.lg, fontWeight: '700', color: '#fff', letterSpacing: 0.5 },
   topbarRight:  { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  homePortChip: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(196,154,42,0.15)', borderRadius: Radius.full, paddingHorizontal: 10, paddingVertical: 4, borderWidth: 0.5, borderColor: 'rgba(196,154,42,0.4)' },
-  homePortTxt:  { fontSize: Typography.xs, color: Colors.doubloonGold, fontWeight: '600' },
   calBtn:       { padding: 4 },
   calBtnTxt:    { fontSize: 18 },
 
   content: { padding: Spacing.lg, gap: Spacing.md, paddingBottom: 32 },
 
-  // Compact hero (≈30% smaller)
   heroCard:       { backgroundColor: Colors.deepSea, borderRadius: Radius.lg, padding: 12, flexDirection: 'row', alignItems: 'flex-start' },
   heroLeft:       { flex: 1 },
   heroLabel:      { fontSize: Typography.xs, color: 'rgba(255,255,255,0.6)', marginBottom: 2 },
@@ -428,7 +432,6 @@ const s = StyleSheet.create({
   heroBoxVal:     { fontSize: Typography.lg, fontWeight: '700', color: Colors.doubloonGold },
   heroBoxSub:     { fontSize: Typography.xs, color: 'rgba(255,255,255,0.5)', marginTop: 1 },
 
-  // Cards
   card:     { backgroundColor: Colors.cardBg, borderRadius: Radius.lg, borderWidth: 0.5, borderColor: Colors.border, padding: Spacing.lg },
   cardTitle:{ fontSize: Typography.base, fontWeight: '600', color: Colors.textPrimary, marginBottom: 2 },
   cardSub:  { fontSize: Typography.xs, color: Colors.textMuted, marginBottom: 14 },

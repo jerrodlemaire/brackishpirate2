@@ -9,8 +9,9 @@ import * as Haptics from 'expo-haptics'
 import { Colors, Typography, Spacing, Radius } from '../../constants/theme'
 import { fetchTideHourly, fetchTideHiLo } from '../../utils/tides'
 import { getSolunarForDate, scoreColor } from '../../utils/solunar'
-import { useApp } from '../../context/AppContext'
-import JollyRoger from '../../components/JollyRoger'
+import { useDataLocation } from '../../hooks/useDataLocation'
+import LocationChip from '../../components/LocationChip'
+import TideStationPickerModal from '../../components/TideStationPickerModal'
 import TidesCalendar from '../../components/TidesCalendar'
 
 const { width } = Dimensions.get('window')
@@ -129,7 +130,6 @@ function TideChart({ hourlyData }) {
             <Stop offset="1" stopColor={Colors.brackishWater} stopOpacity="0.03"/>
           </LinearGradient>
         </Defs>
-        {/* Grid lines */}
         {gridVals.map((v, i) => {
           const y = PAD_T + PLOT_H - ((v - minVal) / range) * PLOT_H
           return (
@@ -137,14 +137,11 @@ function TideChart({ hourlyData }) {
               stroke="rgba(74,143,168,0.15)" strokeWidth="0.5"/>
           )
         })}
-        {/* Area fill */}
         <Path d={areaPath} fill="url(#tideGrad)"/>
-        {/* Smooth bezier line */}
         <Path d={linePath} fill="none" stroke={Colors.brackishWater} strokeWidth="2.5"
           strokeLinecap="round" strokeLinejoin="round"/>
       </Svg>
 
-      {/* Y-axis labels */}
       {gridVals.map((v, i) => {
         const y = PAD_T + PLOT_H - ((v - minVal) / range) * PLOT_H
         return (
@@ -154,12 +151,10 @@ function TideChart({ hourlyData }) {
         )
       })}
 
-      {/* NOW line */}
       <View style={[tc.nowLine, { left: nowX }]}>
         <Text style={tc.nowLbl}>NOW</Text>
       </View>
 
-      {/* Scrub */}
       {scrub && (
         <>
           <View style={[tc.scrubLine, { left: scrub.x }]}/>
@@ -173,7 +168,6 @@ function TideChart({ hourlyData }) {
         </>
       )}
 
-      {/* X labels */}
       {['12a', '6a', '12p', '6p', '11p'].map((l, i) => (
         <Text key={i} style={[tc.xLbl, {
           left: PAD_L + (PLOT_W / 4) * i - 8,
@@ -248,19 +242,20 @@ const ds = StyleSheet.create({
 // ── Screen ────────────────────────────────────────────────────────────────────
 export default function TidesScreen({ navigation }) {
   const insets = useSafeAreaInsets()
-  const { activeStation } = useApp()
-  const [selectedDate, setSelectedDate] = useState(new Date())
-  const [hourly,       setHourly]       = useState([])
-  const [hiLo,         setHiLo]         = useState([])
-  const [loading,      setLoading]      = useState(true)
-  const [refreshing,   setRefreshing]   = useState(false)
-  const [showCalendar, setShowCalendar] = useState(false)
+  const { tideStation, setTideStation } = useDataLocation()
+  const [selectedDate,     setSelectedDate]     = useState(new Date())
+  const [hourly,           setHourly]           = useState([])
+  const [hiLo,             setHiLo]             = useState([])
+  const [loading,          setLoading]          = useState(true)
+  const [refreshing,       setRefreshing]       = useState(false)
+  const [showCalendar,     setShowCalendar]     = useState(false)
+  const [showStationPicker, setShowStationPicker] = useState(false)
 
   const loadData = useCallback(async (date) => {
     try {
       const [h, hl] = await Promise.all([
-        fetchTideHourly(date, activeStation.id),
-        fetchTideHiLo(date, activeStation.id),
+        fetchTideHourly(date, tideStation.id),
+        fetchTideHiLo(date, tideStation.id),
       ])
       setHourly(h)
       setHiLo(hl)
@@ -270,7 +265,7 @@ export default function TidesScreen({ navigation }) {
       setLoading(false)
       setRefreshing(false)
     }
-  }, [activeStation.id])
+  }, [tideStation.id])
 
   useEffect(() => {
     setLoading(true)
@@ -299,10 +294,12 @@ export default function TidesScreen({ navigation }) {
         </TouchableOpacity>
         <Text style={s.topbarTitle}>Tides</Text>
         <View style={s.topbarRight}>
-          <TouchableOpacity style={s.homePortChip} onPress={() => navigation.navigate('Dashboard')}>
-            <JollyRoger size={13} flagColor="#fff" boneColor={Colors.brackishWater}/>
-            <Text style={s.homePortTxt}>Home Port</Text>
-          </TouchableOpacity>
+          <LocationChip
+            label={tideStation.name}
+            onPress={() => setShowStationPicker(true)}
+            color="#fff"
+            boneColor={Colors.brackishWater}
+          />
           <TouchableOpacity onPress={() => setShowCalendar(true)} style={s.calBtn}>
             <Text style={s.calBtnTxt}>📅</Text>
           </TouchableOpacity>
@@ -341,7 +338,7 @@ export default function TidesScreen({ navigation }) {
         {/* Chart */}
         <View style={s.card}>
           <Text style={s.cardTitle}>Today's tide chart</Text>
-          <Text style={s.cardSub}>Slide your finger to explore · {activeStation.name}</Text>
+          <Text style={s.cardSub}>Slide your finger to explore · {tideStation.name}</Text>
           {loading
             ? <View style={{ height: CHART_H, alignItems: 'center', justifyContent: 'center' }}>
                 <ActivityIndicator color={Colors.brackishWater}/>
@@ -372,7 +369,7 @@ export default function TidesScreen({ navigation }) {
         <View style={s.infoRow}>
           {[
             { icon: '🌊', label: 'Tidal range', val: hiLo.length >= 2 ? `${Math.abs(parseFloat(hiLo[0].v) - parseFloat(hiLo[1].v)).toFixed(2)} ft` : '—' },
-            { icon: '📍', label: 'Station', val: activeStation.name },
+            { icon: '📍', label: 'Station', val: tideStation.name },
             { icon: '📐', label: 'Datum', val: 'MLLW' },
           ].map((c, i) => (
             <View key={i} style={s.infoCard}>
@@ -406,6 +403,14 @@ export default function TidesScreen({ navigation }) {
           <TidesCalendar onClose={() => setShowCalendar(false)}/>
         </Modal>
       )}
+
+      {/* Tide station picker */}
+      <TideStationPickerModal
+        visible={showStationPicker}
+        onClose={() => setShowStationPicker(false)}
+        onSelect={(id, name) => setTideStation(id, name)}
+        currentStationId={tideStation.id}
+      />
     </View>
   )
 }
@@ -413,20 +418,16 @@ export default function TidesScreen({ navigation }) {
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.saltWhite },
 
-  // Topbar
   topbar:       { backgroundColor: Colors.brackishWater, flexDirection: 'row', alignItems: 'center', paddingHorizontal: Spacing.md, paddingBottom: 12 },
   topbarBack:   { padding: 4, marginRight: 4 },
   topbarBackTxt:{ fontSize: 26, color: '#fff', lineHeight: 30 },
   topbarTitle:  { flex: 1, fontFamily: 'Georgia', fontSize: Typography.lg, fontWeight: '700', color: '#fff', letterSpacing: 0.5 },
   topbarRight:  { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  homePortChip: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: Radius.full, paddingHorizontal: 10, paddingVertical: 4, borderWidth: 0.5, borderColor: 'rgba(255,255,255,0.3)' },
-  homePortTxt:  { fontSize: Typography.xs, color: '#fff', fontWeight: '600' },
   calBtn:       { padding: 4 },
   calBtnTxt:    { fontSize: 18 },
 
   content: { padding: Spacing.lg, gap: Spacing.md, paddingBottom: 32 },
 
-  // Compact hero (≈30% smaller padding + font)
   heroCard:     { backgroundColor: Colors.deepSea, borderRadius: Radius.lg, padding: 12, flexDirection: 'row', alignItems: 'center' },
   heroLeft:     { flex: 1 },
   heroLabel:    { fontSize: Typography.xs, color: 'rgba(255,255,255,0.6)', marginBottom: 2 },
@@ -438,7 +439,6 @@ const s = StyleSheet.create({
   heroBoxVal:   { fontSize: Typography.base, fontWeight: '700', color: '#fff' },
   heroBoxTime:  { fontSize: Typography.xs, color: 'rgba(255,255,255,0.5)', marginTop: 1 },
 
-  // Cards
   card:       { backgroundColor: Colors.cardBg, borderRadius: Radius.lg, borderWidth: 0.5, borderColor: Colors.border, padding: Spacing.lg },
   cardTitle:  { fontSize: Typography.base, fontWeight: '600', color: Colors.textPrimary, marginBottom: 2 },
   cardSub:    { fontSize: Typography.xs, color: Colors.textMuted, marginBottom: 14 },
