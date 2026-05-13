@@ -198,8 +198,7 @@ function SavedSpots() {
 }
 
 function ProfileSection({ user }) {
-  const { Colors }                                                     = useTheme()
-  const { preference, setPreference }                                  = useTheme()
+  const { Colors } = useTheme()
   const { homePort }                                                   = useApp()
   const { tideStation, buoy, weatherLocation, solunarLocation }       = useDataLocation()
   const [showHomePort, setShowHomePort]                                = useState(false)
@@ -232,11 +231,6 @@ function ProfileSection({ user }) {
     notifLabel:    { fontSize: Typography.base, color: Colors.textPrimary },
     signOutBtn:    { backgroundColor: 'rgba(226,75,74,0.12)', borderRadius: Radius.md, borderWidth: 0.5, borderColor: 'rgba(226,75,74,0.35)', paddingVertical: 13, alignItems: 'center' },
     signOutTxt:    { fontSize: Typography.base, color: Colors.danger, fontWeight: '600' },
-    themeRow:      { flexDirection: 'row', gap: 8 },
-    themeBtn:      { flex: 1, paddingVertical: 9, borderRadius: Radius.md, borderWidth: 0.5, borderColor: Colors.border, alignItems: 'center', backgroundColor: Colors.inputBg },
-    themeBtnOn:    { backgroundColor: `${Colors.doubloonGold}22`, borderColor: Colors.doubloonGold },
-    themeTxt:      { fontSize: Typography.sm, color: Colors.textSecondary, fontWeight: '500' },
-    themeTxtOn:    { color: Colors.doubloonGold, fontWeight: '700' },
   }), [Colors])
 
   const userName     = user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Captain'
@@ -247,12 +241,6 @@ function ProfileSection({ user }) {
     { icon: '📡', label: 'Wave buoy',        val: buoy.name },
     { icon: '🌤', label: 'Weather location', val: weatherLocation.name },
     { icon: '🌙', label: 'Solunar location', val: solunarLocation.name },
-  ]
-
-  const THEME_OPTS = [
-    { key: 'dark',  label: '🌙 Dark'  },
-    { key: 'light', label: '☀️ Light' },
-    { key: 'auto',  label: '⚡ Auto'  },
   ]
 
   return (
@@ -270,20 +258,6 @@ function ProfileSection({ user }) {
             <Text style={s.statLabel}>{st.label}</Text>
           </View>
         ))}
-      </View>
-
-      {/* Appearance */}
-      <View style={s.card}>
-        <Text style={s.cardTitle}>Appearance</Text>
-        <View style={s.themeRow}>
-          {THEME_OPTS.map(opt => (
-            <TouchableOpacity key={opt.key}
-              style={[s.themeBtn, preference === opt.key && s.themeBtnOn]}
-              onPress={() => setPreference(opt.key)}>
-              <Text style={[s.themeTxt, preference === opt.key && s.themeTxtOn]}>{opt.label}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
       </View>
 
       {/* Home Port */}

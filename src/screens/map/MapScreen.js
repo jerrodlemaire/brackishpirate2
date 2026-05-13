@@ -4,6 +4,7 @@ import {
   ScrollView, ActivityIndicator, Alert,
   Dimensions, Animated,
 } from 'react-native'
+import { fetchWeatherAndForecast } from '../../utils/weather'
 import MapView, { Marker, Circle, UrlTile, PROVIDER_GOOGLE } from 'react-native-maps'
 import * as Location from 'expo-location'
 import { Typography, Spacing, Radius } from '../../constants/theme'
@@ -34,6 +35,7 @@ const LAYERS = [
   { id: 'fish',  label: 'Fish activity', icon: '🐟' },
   { id: 'tides', label: 'Tide stations', icon: '🌊' },
   { id: 'radar', label: 'Live radar',    icon: '🌧' },
+  { id: 'wind',  label: 'Wind',          icon: '💨' },
   { id: 'ramps', label: 'Boat ramps',    icon: '⚓' },
 ]
 
@@ -55,6 +57,75 @@ const mapStyle = [
   { featureType: 'transit', stylers: [{ visibility: 'off' }] },
   { featureType: 'administrative', elementType: 'geometry', stylers: [{ color: '#4A8FA8' }] },
 ]
+
+const PARTICLE_COUNT = 28
+
+function WindParticleOverlay({ windSpeed, windDeg }) {
+  const { width: W, height: H } = Dimensions.get('window')
+  const particles = useRef(
+    Array.from({ length: PARTICLE_COUNT }, () => ({
+      startX: Math.random() * W,
+      startY: Math.random() * H,
+      tx:      new Animated.Value(0),
+      ty:      new Animated.Value(0),
+      opacity: new Animated.Value(0),
+      size:    2 + Math.random() * 2,
+    }))
+  ).current
+
+  useEffect(() => {
+    const rad   = (windDeg * Math.PI) / 180
+    const dx    = -Math.sin(rad)
+    const dy    = Math.cos(rad)
+    const speed = Math.max(3, windSpeed)
+    const dist  = Math.min(W, H) * 0.7
+    const dur   = Math.round((dist / speed) * 350)
+
+    const loops = particles.map((p, i) => {
+      let loop
+      const start = () => {
+        p.tx.setValue(0)
+        p.ty.setValue(0)
+        p.opacity.setValue(0)
+        p.startX = Math.random() * W
+        p.startY = Math.random() * H
+        loop = Animated.parallel([
+          Animated.timing(p.tx, { toValue: dx * dist, duration: dur, useNativeDriver: true }),
+          Animated.timing(p.ty, { toValue: dy * dist, duration: dur, useNativeDriver: true }),
+          Animated.sequence([
+            Animated.timing(p.opacity, { toValue: 0.75, duration: Math.round(dur * 0.15), useNativeDriver: true }),
+            Animated.timing(p.opacity, { toValue: 0.75, duration: Math.round(dur * 0.65), useNativeDriver: true }),
+            Animated.timing(p.opacity, { toValue: 0,    duration: Math.round(dur * 0.2),  useNativeDriver: true }),
+          ]),
+        ])
+        loop.start(({ finished }) => { if (finished) start() })
+      }
+      const delay = (dur / PARTICLE_COUNT) * i
+      const timer = setTimeout(start, delay)
+      return () => { clearTimeout(timer); loop?.stop() }
+    })
+
+    return () => { loops.forEach(cancel => cancel()) }
+  }, [windDeg, windSpeed])
+
+  return (
+    <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
+      {particles.map((p, i) => (
+        <Animated.View key={i} style={{
+          position: 'absolute',
+          left: p.startX,
+          top:  p.startY,
+          width:  p.size,
+          height: p.size,
+          borderRadius: p.size / 2,
+          backgroundColor: '#4A8FA8',
+          transform: [{ translateX: p.tx }, { translateY: p.ty }],
+          opacity: p.opacity,
+        }}/>
+      ))}
+    </View>
+  )
+}
 
 function haversine(lat1, lng1, lat2, lng2) {
   const R    = 3958.8
@@ -87,6 +158,8 @@ export default function MapScreen({ navigation }) {
   const [radarFrames,    setRadarFrames]    = useState([])
   const [radarFrameIdx,  setRadarFrameIdx]  = useState(0)
   const [radarPlaying,   setRadarPlaying]   = useState(false)
+  const [windData,       setWindData]       = useState(null)
+  const [windLoading,    setWindLoading]    = useState(false)
   const radarIntervalRef                    = useRef(null)
   const slideAnim                           = useRef(new Animated.Value(0)).current
 
@@ -168,6 +241,17 @@ export default function MapScreen({ navigation }) {
   }, [activeLayers, stationsLoaded, stationsLoading])
 
   useEffect(() => {
+    if (activeLayers.includes('wind') && !windData && !windLoading) {
+      setWindLoading(true)
+      const lat = region.latitude, lng = region.longitude
+      fetchWeatherAndForecast(lat, lng)
+        .then(w => setWindData(w?.current ?? null))
+        .catch(() => {})
+        .finally(() => setWindLoading(false))
+    }
+  }, [activeLayers, windData, windLoading, region.latitude, region.longitude])
+
+  useEffect(() => {
     if (activeLayers.includes('radar') && radarFrames.length === 0) {
       fetch('https://api.rainviewer.com/public/weather-maps.json')
         .then(r => r.json())
@@ -228,6 +312,9 @@ export default function MapScreen({ navigation }) {
         setRadarFrames([])
         setRadarFrameIdx(0)
         setRadarPlaying(false)
+      }
+      if (id === 'wind' && !next.includes('wind')) {
+        setWindData(null)
       }
       return next
     })
@@ -374,6 +461,14 @@ export default function MapScreen({ navigation }) {
         ))}
       </MapView>
 
+      {/* ANIMATED WIND PARTICLES */}
+      {activeLayers.includes('wind') && windData && (
+        <WindParticleOverlay
+          windSpeed={windData.windspeed_10m ?? 10}
+          windDeg={windData.winddirection_10m ?? 180}
+        />
+      )}
+
       {/* TOP CONTROLS */}
       <View style={styles.topBar}>
         <TouchableOpacity style={styles.topBtn}
@@ -399,6 +494,7 @@ export default function MapScreen({ navigation }) {
                 <Text style={[styles.layerLabel, on && styles.layerLabelOn]}>{layer.label}</Text>
                 {layer.id === 'tides' && stationsLoading && <ActivityIndicator size="small" color={Colors.brackishWater} style={{ marginLeft: 4 }}/>}
                 {layer.id === 'radar' && activeLayers.includes('radar') && radarFrames.length === 0 && <ActivityIndicator size="small" color={Colors.brackishWater} style={{ marginLeft: 4 }}/>}
+                {layer.id === 'wind'  && windLoading && <ActivityIndicator size="small" color={Colors.brackishWater} style={{ marginLeft: 4 }}/>}
               </TouchableOpacity>
             )
           })}

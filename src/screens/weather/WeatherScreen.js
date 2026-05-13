@@ -4,7 +4,7 @@ import {
   ActivityIndicator, RefreshControl, Dimensions, PanResponder, Modal,
 } from 'react-native'
 import MapView, { UrlTile, PROVIDER_GOOGLE } from 'react-native-maps'
-import Svg, { Path, Defs, LinearGradient, Stop } from 'react-native-svg'
+import Svg, { Path, G, Line, Defs, LinearGradient, Stop, Polygon } from 'react-native-svg'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Typography, Spacing, Radius } from '../../constants/theme'
 import { useTheme } from '../../hooks/useTheme'
@@ -20,7 +20,7 @@ const CHART_H = 140
 const PAD_L   = 36
 const PAD_R   = 12
 const PAD_T   = 14
-const PAD_B   = 24
+const PAD_B   = 32
 const PLOT_W  = CHART_W - PAD_L - PAD_R
 const PLOT_H  = CHART_H - PAD_T - PAD_B
 
@@ -50,17 +50,54 @@ function radarFrameTime(ts) {
   return new Date(ts * 1000).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
 }
 
-// ── Radar card ────────────────────────────────────────────────────────────────
+// ── Wind direction arrow (SVG) ─────────────────────────────────────────────
+function WindArrow({ deg, size = 12, color }) {
+  const rad = (deg * Math.PI) / 180
+  const cx = size / 2, cy = size / 2, len = size * 0.42
+  const x2 = cx + Math.sin(rad) * len
+  const y2 = cy - Math.cos(rad) * len
+  const x1 = cx - Math.sin(rad) * len * 0.5
+  const y1 = cy + Math.cos(rad) * len * 0.5
+  const perpX = Math.cos(rad) * size * 0.12
+  const perpY = Math.sin(rad) * size * 0.12
+  const arrowPts = `${x2},${y2} ${x2 - Math.sin(rad) * size * 0.22 + Math.cos(rad) * size * 0.12},${y2 + Math.cos(rad) * size * 0.22 + Math.sin(rad) * size * 0.12} ${x2 - Math.sin(rad) * size * 0.22 - Math.cos(rad) * size * 0.12},${y2 + Math.cos(rad) * size * 0.22 - Math.sin(rad) * size * 0.12}`
+  return (
+    <Svg width={size} height={size}>
+      <Line x1={x1} y1={y1} x2={x2} y2={y2} stroke={color} strokeWidth="1.5" strokeLinecap="round"/>
+      <Polygon points={arrowPts} fill={color}/>
+    </Svg>
+  )
+}
+
+// ── Mini sparkline ─────────────────────────────────────────────────────────
+function MiniSparkline({ values, color, h = 22, w = 80 }) {
+  const filtered = (values || []).filter(v => v != null && !isNaN(v))
+  if (filtered.length < 2) return null
+  const min = Math.min(...filtered), max = Math.max(...filtered)
+  const rng = max - min || 1
+  const pts = filtered.map((v, i) => {
+    const x = (i / (filtered.length - 1)) * w
+    const y = h - ((v - min) / rng) * h * 0.8 - h * 0.1
+    return `${x.toFixed(1)},${y.toFixed(1)}`
+  }).join(' ')
+  return (
+    <Svg width={w} height={h}>
+      <Path d={`M ${pts.split(' ').join(' L ')}`} fill="none" stroke={color} strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+    </Svg>
+  )
+}
+
+// ── Radar card ─────────────────────────────────────────────────────────────
 function RadarCard({ lat, lng }) {
-  const { Colors }    = useTheme()
-  const insets        = useSafeAreaInsets()
-  const [frames,      setFrames]      = useState([])
-  const [frameIdx,    setFrameIdx]    = useState(0)
-  const [playing,     setPlaying]     = useState(true)
-  const [fullscreen,  setFullscreen]  = useState(false)
-  const playingRef    = useRef(true)
-  const framesRef     = useRef([])
-  const region        = { latitude: lat, longitude: lng, latitudeDelta: 2.5, longitudeDelta: 2.5 }
+  const { Colors }   = useTheme()
+  const insets       = useSafeAreaInsets()
+  const [frames,     setFrames]     = useState([])
+  const [frameIdx,   setFrameIdx]   = useState(0)
+  const [playing,    setPlaying]    = useState(true)
+  const [fullscreen, setFullscreen] = useState(false)
+  const playingRef   = useRef(true)
+  const framesRef    = useRef([])
+  const region       = { latitude: lat, longitude: lng, latitudeDelta: 2.5, longitudeDelta: 2.5 }
 
   playingRef.current = playing
   framesRef.current  = frames
@@ -108,17 +145,14 @@ function RadarCard({ lat, lng }) {
     return () => clearInterval(id)
   }, [])
 
-  const togglePlay = () => setPlaying(p => !p)
-  const seekTo    = (i) => { setFrameIdx(i); setPlaying(false) }
-
   const Timeline = () => (
     <View style={rc.controls}>
-      <TouchableOpacity onPress={togglePlay} style={rc.playBtn}>
+      <TouchableOpacity onPress={() => setPlaying(p => !p)} style={rc.playBtn}>
         <Text style={rc.playIcon}>{playing ? '⏸' : '▶'}</Text>
       </TouchableOpacity>
       <View style={rc.timeline}>
         {frames.map((_, i) => (
-          <TouchableOpacity key={i} onPress={() => seekTo(i)}
+          <TouchableOpacity key={i} onPress={() => { setFrameIdx(i); setPlaying(false) }}
             style={[rc.tick, i === frameIdx && rc.tickActive]}/>
         ))}
       </View>
@@ -136,80 +170,39 @@ function RadarCard({ lat, lng }) {
             : <Text style={rc.frameTime}>{radarFrameTime(frames[frameIdx].time)}</Text>
           }
         </View>
-
         <TouchableOpacity activeOpacity={0.9} onPress={() => setFullscreen(true)} style={rc.mapWrap}>
-          <MapView
-            style={rc.map}
-            provider={PROVIDER_GOOGLE}
-            mapType="satellite"
-            initialRegion={region}
-            scrollEnabled={false}
-            zoomEnabled={false}
-            rotateEnabled={false}
-            pitchEnabled={false}
-            showsUserLocation={false}
-            showsMyLocationButton={false}
-            showsCompass={false}
-            toolbarEnabled={false}
-            minZoomLevel={3}
-            maxZoomLevel={18}
-            pointerEvents="none"
-          >
+          <MapView style={rc.map} provider={PROVIDER_GOOGLE} mapType="satellite"
+            initialRegion={region} scrollEnabled={false} zoomEnabled={false}
+            rotateEnabled={false} pitchEnabled={false} showsUserLocation={false}
+            showsMyLocationButton={false} showsCompass={false} toolbarEnabled={false}
+            minZoomLevel={3} maxZoomLevel={18} pointerEvents="none">
             {frames.map((frame, i) => (
-              <UrlTile key={i}
-                urlTemplate={`${frame.url}/256/{z}/{x}/{y}/2/1_1.png`}
-                zIndex={2}
-                opacity={i === frameIdx ? 0.7 : 0}
-                tileSize={256}
-                minimumZ={1}
-                maximumZ={12}
-                maximumNativeZ={8}
-              />
+              <UrlTile key={i} urlTemplate={`${frame.url}/256/{z}/{x}/{y}/2/1_1.png`}
+                zIndex={2} opacity={i === frameIdx ? 0.7 : 0} tileSize={256}
+                minimumZ={1} maximumZ={12} maximumNativeZ={8}/>
             ))}
           </MapView>
-          <View style={rc.expandHint}>
-            <Text style={rc.expandTxt}>⤢ Full screen</Text>
-          </View>
+          <View style={rc.expandHint}><Text style={rc.expandTxt}>⤢ Full screen</Text></View>
         </TouchableOpacity>
-
         {frames.length > 0 && <Timeline/>}
       </View>
 
       <Modal visible={fullscreen} animationType="slide" statusBarTranslucent>
         <View style={rc.fsContainer}>
-          <MapView
-            style={StyleSheet.absoluteFillObject}
-            provider={PROVIDER_GOOGLE}
-            mapType="satellite"
-            initialRegion={region}
-            showsUserLocation
-            showsMyLocationButton={false}
-            showsCompass={false}
-            minZoomLevel={3}
-            maxZoomLevel={18}
-          >
+          <MapView style={StyleSheet.absoluteFillObject} provider={PROVIDER_GOOGLE}
+            mapType="satellite" initialRegion={region} showsUserLocation
+            showsMyLocationButton={false} showsCompass={false} minZoomLevel={3} maxZoomLevel={18}>
             {frames.map((frame, i) => (
-              <UrlTile key={i}
-                urlTemplate={`${frame.url}/256/{z}/{x}/{y}/2/1_1.png`}
-                zIndex={2}
-                opacity={i === frameIdx ? 0.7 : 0}
-                tileSize={256}
-                minimumZ={1}
-                maximumZ={12}
-                maximumNativeZ={8}
-              />
+              <UrlTile key={i} urlTemplate={`${frame.url}/256/{z}/{x}/{y}/2/1_1.png`}
+                zIndex={2} opacity={i === frameIdx ? 0.7 : 0} tileSize={256}
+                minimumZ={1} maximumZ={12} maximumNativeZ={8}/>
             ))}
           </MapView>
-          <TouchableOpacity
-            style={[rc.fsClose, { top: insets.top + 12 }]}
-            onPress={() => setFullscreen(false)}
-          >
+          <TouchableOpacity style={[rc.fsClose, { top: insets.top + 12 }]} onPress={() => setFullscreen(false)}>
             <Text style={rc.fsCloseTxt}>✕</Text>
           </TouchableOpacity>
           {frames.length > 0 && (
-            <View style={[rc.fsBar, { paddingBottom: insets.bottom + 12 }]}>
-              <Timeline/>
-            </View>
+            <View style={[rc.fsBar, { paddingBottom: insets.bottom + 12 }]}><Timeline/></View>
           )}
         </View>
       </Modal>
@@ -217,7 +210,7 @@ function RadarCard({ lat, lng }) {
   )
 }
 
-// ── Temp chart ────────────────────────────────────────────────────────────────
+// ── Temp chart ─────────────────────────────────────────────────────────────
 function TempChart({ temps }) {
   const { Colors } = useTheme()
   const [scrubIdx, setScrubIdx] = useState(null)
@@ -240,43 +233,25 @@ function TempChart({ temps }) {
     panRef.current = PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder:  () => true,
-      onPanResponderGrant: (e) => {
-        const i = getIdxFn.current?.(e.nativeEvent.locationX)
-        if (i != null) setScrubIdx(i)
-      },
-      onPanResponderMove: (e) => {
-        const i = getIdxFn.current?.(e.nativeEvent.locationX)
-        if (i != null) setScrubIdx(i)
-      },
+      onPanResponderGrant: (e) => { const i = getIdxFn.current?.(e.nativeEvent.locationX); if (i != null) setScrubIdx(i) },
+      onPanResponderMove:  (e) => { const i = getIdxFn.current?.(e.nativeEvent.locationX); if (i != null) setScrubIdx(i) },
       onPanResponderRelease: () => { setTimeout(() => setScrubIdx(null), 2500) },
     })
   }
 
-  if (!temps || temps.length === 0) {
-    return <View style={[ch.wrap, { alignItems: 'center', justifyContent: 'center' }]}><ActivityIndicator color={Colors.marshGreen}/></View>
-  }
+  if (!temps || temps.length === 0) return (
+    <View style={[ch.wrap, { alignItems: 'center', justifyContent: 'center' }]}><ActivityIndicator color={Colors.marshGreen}/></View>
+  )
 
-  const minVal = Math.min(...temps)
-  const maxVal = Math.max(...temps)
-  const range  = maxVal - minVal || 1
-  const stepX  = PLOT_W / (temps.length - 1)
-
-  tempsRef.current = temps
-  stepXRef.current = stepX
+  const minVal = Math.min(...temps), maxVal = Math.max(...temps)
+  const range = maxVal - minVal || 1
+  const stepX = PLOT_W / (temps.length - 1)
+  tempsRef.current = temps; stepXRef.current = stepX
   getIdxFn.current = (x) => Math.max(0, Math.min(tempsRef.current.length - 1, Math.round((x - PAD_L) / stepXRef.current)))
-
-  const pan = panRef.current
-
-  const pts = temps.map((v, i) => ({
-    x: PAD_L + i * stepX,
-    y: PAD_T + PLOT_H - ((v - minVal) / range) * PLOT_H,
-    v,
-  }))
-
-  const linePath = smoothBezierPath(pts)
-  const areaPath = smoothAreaPath(pts, CHART_H - PAD_B)
-  const nowX     = PAD_L + Math.min(new Date().getHours(), temps.length - 1) * stepX
-  const scrub    = scrubIdx !== null ? pts[scrubIdx] : null
+  const pan  = panRef.current
+  const pts  = temps.map((v, i) => ({ x: PAD_L + i * stepX, y: PAD_T + PLOT_H - ((v - minVal) / range) * PLOT_H, v }))
+  const nowX = PAD_L + Math.min(new Date().getHours(), temps.length - 1) * stepX
+  const scrub = scrubIdx !== null ? pts[scrubIdx] : null
   const gridVals = [minVal, minVal + range * 0.5, maxVal]
 
   return (
@@ -292,43 +267,180 @@ function TempChart({ temps }) {
           const y = PAD_T + PLOT_H - ((v - minVal) / range) * PLOT_H
           return <Path key={i} d={`M ${PAD_L},${y.toFixed(1)} L ${CHART_W - PAD_R},${y.toFixed(1)}`} stroke="rgba(46,139,90,0.12)" strokeWidth="0.5"/>
         })}
-        <Path d={areaPath} fill="url(#tempGrad)"/>
-        <Path d={linePath} fill="none" stroke={Colors.marshGreen} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+        <Path d={smoothAreaPath(pts, CHART_H - PAD_B)} fill="url(#tempGrad)"/>
+        <Path d={smoothBezierPath(pts)} fill="none" stroke={Colors.marshGreen} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
       </Svg>
-
       {gridVals.map((v, i) => {
         const y = PAD_T + PLOT_H - ((v - minVal) / range) * PLOT_H
         return <Text key={i} style={[ch.gridLbl, { top: y - 6 }]}>{Math.round(v)}°</Text>
       })}
-
       <View style={[ch.nowLine, { left: nowX }]}/>
-
       {scrub && (
         <>
           <View style={[ch.scrubLine, { left: scrub.x }]}/>
-          <View style={[ch.bubble, {
-            left: Math.min(Math.max(scrub.x - 30, PAD_L), CHART_W - PAD_R - 70),
-            top: scrub.y - 38,
-          }]}>
+          <View style={[ch.bubble, { left: Math.min(Math.max(scrub.x - 30, PAD_L), CHART_W - PAD_R - 70), top: scrub.y - 38 }]}>
             <Text style={ch.bubbleVal}>{Math.round(scrub.v)}°F</Text>
           </View>
         </>
       )}
-
       {HOURS.map((l, i) => (
-        <Text key={i} style={[ch.xLbl, {
-          left: PAD_L + (PLOT_W / (HOURS.length - 1)) * i - 8,
-          top:  CHART_H - PAD_B + 4,
-        }]}>{l}</Text>
+        <Text key={i} style={[ch.xLbl, { left: PAD_L + (PLOT_W / (HOURS.length - 1)) * i - 8, top: CHART_H - PAD_B + 4 }]}>{l}</Text>
       ))}
     </View>
   )
 }
 
-// ── 10-day weather strip ──────────────────────────────────────────────────────
+// ── Hourly wind chart (speed bezier + direction arrows) ────────────────────
+function WindChart({ speeds, dirs }) {
+  const { Colors } = useTheme()
+  const [scrubIdx, setScrubIdx] = useState(null)
+  const panRef    = useRef(null)
+  const getIdxFn  = useRef(null)
+  const dataRef   = useRef([])
+  const stepXRef  = useRef(1)
+
+  const wc = useMemo(() => StyleSheet.create({
+    wrap:      { height: CHART_H, width: CHART_W, position: 'relative', marginBottom: 4 },
+    gridLbl:   { position: 'absolute', left: 0, width: PAD_L - 4, textAlign: 'right', fontSize: 11, fontWeight: 'bold', color: Colors.textMuted },
+    nowLine:   { position: 'absolute', top: PAD_T, bottom: PAD_B, width: 1.5, backgroundColor: Colors.doubloonGold },
+    scrubLine: { position: 'absolute', top: PAD_T, bottom: PAD_B, width: 1.5, backgroundColor: Colors.brackishWater, opacity: 0.8 },
+    bubble:    { position: 'absolute', backgroundColor: Colors.brackishWater, borderRadius: Radius.sm, paddingHorizontal: 8, paddingVertical: 5, minWidth: 72, alignItems: 'center', flexDirection: 'row', gap: 5, justifyContent: 'center' },
+    bubbleVal: { fontSize: 14, fontWeight: '700', color: '#fff' },
+    xLbl:      { position: 'absolute', fontSize: 11, fontWeight: 'bold', color: Colors.textSecondary },
+    arrowRow:  { position: 'absolute', flexDirection: 'row', left: PAD_L, right: PAD_R, bottom: 4, justifyContent: 'space-between' },
+  }), [Colors])
+
+  if (!panRef.current) {
+    panRef.current = PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder:  () => true,
+      onPanResponderGrant: (e) => { const i = getIdxFn.current?.(e.nativeEvent.locationX); if (i != null) setScrubIdx(i) },
+      onPanResponderMove:  (e) => { const i = getIdxFn.current?.(e.nativeEvent.locationX); if (i != null) setScrubIdx(i) },
+      onPanResponderRelease: () => { setTimeout(() => setScrubIdx(null), 2500) },
+    })
+  }
+
+  if (!speeds || speeds.length === 0) return (
+    <View style={[wc.wrap, { alignItems: 'center', justifyContent: 'center' }]}><ActivityIndicator color={Colors.brackishWater}/></View>
+  )
+
+  const minVal = 0
+  const maxVal = Math.max(...speeds, 5)
+  const range  = maxVal - minVal || 1
+  const stepX  = PLOT_W / (speeds.length - 1)
+  dataRef.current  = speeds; stepXRef.current = stepX
+  getIdxFn.current = (x) => Math.max(0, Math.min(dataRef.current.length - 1, Math.round((x - PAD_L) / stepXRef.current)))
+  const pan  = panRef.current
+  const pts  = speeds.map((v, i) => ({ x: PAD_L + i * stepX, y: PAD_T + PLOT_H - ((v - minVal) / range) * PLOT_H, v }))
+  const nowX = PAD_L + Math.min(new Date().getHours(), speeds.length - 1) * stepX
+  const scrub = scrubIdx !== null ? pts[scrubIdx] : null
+  const gridVals = [0, Math.round(maxVal * 0.5), Math.round(maxVal)]
+
+  // Arrow markers every 3 hours
+  const arrowHours = [0, 3, 6, 9, 12, 15, 18, 21]
+
+  return (
+    <View style={wc.wrap} {...pan.panHandlers}>
+      <Svg width={CHART_W} height={CHART_H - PAD_B + 4} style={{ position: 'absolute', top: 0, left: 0 }}>
+        <Defs>
+          <LinearGradient id="windGrad" x1="0" y1="0" x2="0" y2="1">
+            <Stop offset="0" stopColor={Colors.brackishWater} stopOpacity="0.35"/>
+            <Stop offset="1" stopColor={Colors.brackishWater} stopOpacity="0.03"/>
+          </LinearGradient>
+        </Defs>
+        {gridVals.map((v, i) => {
+          const y = PAD_T + PLOT_H - ((v - minVal) / range) * PLOT_H
+          return <Path key={i} d={`M ${PAD_L},${y.toFixed(1)} L ${CHART_W - PAD_R},${y.toFixed(1)}`} stroke="rgba(74,143,168,0.12)" strokeWidth="0.5"/>
+        })}
+        <Path d={smoothAreaPath(pts, CHART_H - PAD_B)} fill="url(#windGrad)"/>
+        <Path d={smoothBezierPath(pts)} fill="none" stroke={Colors.brackishWater} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+      </Svg>
+
+      {gridVals.map((v, i) => {
+        const y = PAD_T + PLOT_H - ((v - minVal) / range) * PLOT_H
+        return <Text key={i} style={[wc.gridLbl, { top: y - 6 }]}>{v}</Text>
+      })}
+      <View style={[wc.nowLine, { left: nowX }]}/>
+      {scrub && (
+        <>
+          <View style={[wc.scrubLine, { left: scrub.x }]}/>
+          <View style={[wc.bubble, { left: Math.min(Math.max(scrub.x - 40, PAD_L), CHART_W - PAD_R - 90), top: scrub.y - 40 }]}>
+            {dirs && dirs[scrubIdx] != null && <WindArrow deg={dirs[scrubIdx]} size={14} color="#fff"/>}
+            <Text style={wc.bubbleVal}>{Math.round(scrub.v)} mph</Text>
+          </View>
+        </>
+      )}
+      {HOURS.map((l, i) => (
+        <Text key={i} style={[wc.xLbl, { left: PAD_L + (PLOT_W / (HOURS.length - 1)) * i - 8, top: CHART_H - PAD_B + 4 }]}>{l}</Text>
+      ))}
+
+      {/* Direction arrows at 3-hour marks */}
+      {dirs && dirs.length > 0 && (
+        <View style={wc.arrowRow}>
+          {arrowHours.map(h => {
+            const idx = Math.min(h, dirs.length - 1)
+            if (dirs[idx] == null) return <View key={h} style={{ width: 14 }}/>
+            return (
+              <View key={h} style={{ alignItems: 'center' }}>
+                <WindArrow deg={dirs[idx]} size={14} color={`${Colors.brackishWater}CC`}/>
+              </View>
+            )
+          })}
+        </View>
+      )}
+    </View>
+  )
+}
+
+// ── 10-day wind forecast strip ────────────────────────────────────────────
+function TenDayWindStrip({ daily }) {
+  const { Colors } = useTheme()
+  const ws = useMemo(() => StyleSheet.create({
+    wrap:    { gap: 6 },
+    title:   { fontSize: Typography.base, fontWeight: '600', color: Colors.textPrimary, marginBottom: 6 },
+    row:     { flexDirection: 'row', alignItems: 'center', paddingVertical: 9, borderBottomWidth: 0.5, borderBottomColor: Colors.border, gap: 8 },
+    day:     { width: 38, fontSize: Typography.sm, color: Colors.textSecondary, fontWeight: '500' },
+    dayToday:{ color: Colors.brackishWater, fontWeight: '700' },
+    arrow:   { width: 18, alignItems: 'center' },
+    barWrap: { flex: 1, height: 6, backgroundColor: Colors.inputBg, borderRadius: 3, overflow: 'hidden' },
+    bar:     { height: '100%', borderRadius: 3, backgroundColor: Colors.brackishWater },
+    speed:   { width: 52, fontSize: Typography.sm, fontWeight: '600', color: Colors.textPrimary, textAlign: 'right' },
+  }), [Colors])
+
+  if (!daily?.windspeed_10m_max?.length) return null
+  const maxSpeed = Math.max(...daily.windspeed_10m_max.slice(0, 10), 1)
+  const count    = Math.min(daily.time.length, 10)
+
+  return (
+    <View style={ws.wrap}>
+      <Text style={ws.title}>10-day wind forecast</Text>
+      {Array.from({ length: count }, (_, i) => {
+        const date    = new Date(daily.time[i] + 'T12:00:00')
+        const isToday = new Date().toDateString() === date.toDateString()
+        const dayName = isToday ? 'Today' : date.toLocaleDateString('en-US', { weekday: 'short' })
+        const spd     = Math.round(daily.windspeed_10m_max[i])
+        const dir     = daily.winddirection_10m_dominant?.[i]
+        const barW    = (spd / maxSpeed) * 100
+        return (
+          <View key={i} style={ws.row}>
+            <Text style={[ws.day, isToday && ws.dayToday]}>{dayName}</Text>
+            <View style={ws.arrow}>
+              {dir != null && <WindArrow deg={dir} size={16} color={Colors.brackishWater}/>}
+            </View>
+            <View style={ws.barWrap}>
+              <View style={[ws.bar, { width: `${barW}%` }]}/>
+            </View>
+            <Text style={ws.speed}>{spd} mph</Text>
+          </View>
+        )
+      })}
+    </View>
+  )
+}
+
+// ── 10-day weather strip ──────────────────────────────────────────────────
 function WeatherDayStrip({ daily, selectedIdx, onSelect }) {
   const { Colors } = useTheme()
-
   const wds = useMemo(() => StyleSheet.create({
     scroll:  { backgroundColor: Colors.topbarBg },
     content: { paddingHorizontal: 12, paddingVertical: 10, gap: 6 },
@@ -344,17 +456,13 @@ function WeatherDayStrip({ daily, selectedIdx, onSelect }) {
   if (!daily) return null
   const count = Math.min(daily.time.length, 10)
   return (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false}
-      style={wds.scroll} contentContainerStyle={wds.content}>
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={wds.scroll} contentContainerStyle={wds.content}>
       {Array.from({ length: count }, (_, i) => {
         const date     = new Date(daily.time[i] + 'T12:00:00')
         const selected = selectedIdx === i
         const dayLabel = i === 0 ? 'Today' : date.toLocaleDateString('en-US', { weekday: 'short' })
         return (
-          <TouchableOpacity key={i}
-            style={[wds.pill, selected && wds.pillSel]}
-            onPress={() => onSelect(i)}
-          >
+          <TouchableOpacity key={i} style={[wds.pill, selected && wds.pillSel]} onPress={() => onSelect(i)}>
             <Text style={[wds.label, selected && wds.textSel]}>{dayLabel}</Text>
             <Text style={[wds.num,   selected && wds.textSel]}>{date.getDate()}</Text>
             <Text style={wds.emoji}>{weatherEmoji(daily.weathercode[i])}</Text>
@@ -366,40 +474,10 @@ function WeatherDayStrip({ daily, selectedIdx, onSelect }) {
   )
 }
 
-// ── Day forecast row ──────────────────────────────────────────────────────────
-function DayRow({ time, code, high, low, wind }) {
-  const { Colors } = useTheme()
-  const dr = useMemo(() => StyleSheet.create({
-    row:      { flexDirection: 'row', alignItems: 'center', paddingVertical: 11, borderBottomWidth: 0.5, borderBottomColor: Colors.border },
-    day:      { width: 48, fontSize: Typography.sm, color: Colors.textSecondary, fontWeight: '500' },
-    dayToday: { color: Colors.brackishWater, fontWeight: '700' },
-    icon:     { fontSize: 20, width: 32 },
-    temps:    { flex: 1, flexDirection: 'row', gap: 8, alignItems: 'center' },
-    high:     { fontSize: Typography.base, fontWeight: '700', color: Colors.textPrimary, minWidth: 36 },
-    low:      { fontSize: Typography.base, color: Colors.textMuted, minWidth: 36 },
-    wind:     { fontSize: Typography.xs, color: Colors.textSecondary },
-  }), [Colors])
-
-  const date    = new Date(time + 'T12:00:00')
-  const dayName = date.toLocaleDateString('en-US', { weekday: 'short' })
-  const isToday = new Date().toDateString() === date.toDateString()
-  return (
-    <View style={dr.row}>
-      <Text style={[dr.day, isToday && dr.dayToday]}>{isToday ? 'Today' : dayName}</Text>
-      <Text style={dr.icon}>{weatherEmoji(code)}</Text>
-      <View style={dr.temps}>
-        <Text style={dr.high}>{Math.round(high)}°</Text>
-        <Text style={dr.low}>{Math.round(low)}°</Text>
-      </View>
-      <Text style={dr.wind}>💨 {Math.round(wind)} mph</Text>
-    </View>
-  )
-}
-
-// ── Screen ────────────────────────────────────────────────────────────────────
+// ── Screen ────────────────────────────────────────────────────────────────
 export default function WeatherScreen({ navigation }) {
   const { Colors }  = useTheme()
-  const insets = useSafeAreaInsets()
+  const insets      = useSafeAreaInsets()
   const { weatherLocation, setWeatherLocation } = useDataLocation()
   const [weather,        setWeather]        = useState(null)
   const [loading,        setLoading]        = useState(true)
@@ -419,80 +497,68 @@ export default function WeatherScreen({ navigation }) {
     }
   }, [weatherLocation.lat, weatherLocation.lng])
 
-  useEffect(() => {
-    setLoading(true)
-    loadData()
-  }, [loadData])
-
+  useEffect(() => { setLoading(true); loadData() }, [loadData])
   const onRefresh = () => { setRefreshing(true); loadData() }
 
   const cur    = weather?.current
   const daily  = weather?.daily
-  const hourly = weather?.hourlyTemps || []
+  const hourly = weather?.hourlyTemps         || []
+  const wSpeeds= weather?.hourlyWindSpeeds    || []
+  const wDirs  = weather?.hourlyWindDirs      || []
 
   const selIdx  = Math.min(selectedDayIdx, (daily?.time?.length ?? 1) - 1)
   const isToday = selIdx === 0
 
   const s = useMemo(() => StyleSheet.create({
     container: { flex: 1, backgroundColor: Colors.screenBg },
-
     topbar:        { backgroundColor: Colors.topbarBg, flexDirection: 'row', alignItems: 'center', paddingHorizontal: Spacing.md, paddingBottom: 12, gap: 8 },
     topbarBack:    { padding: 4 },
     topbarBackTxt: { fontSize: 26, color: '#fff', lineHeight: 30 },
     topbarTitle:   { flex: 1, fontFamily: 'Georgia', fontSize: Typography.lg, fontWeight: '700', color: '#fff', letterSpacing: 0.5 },
-
     content: { padding: Spacing.lg, gap: Spacing.md, paddingBottom: 80 },
-
     loadingBox: { alignItems: 'center', paddingTop: 80, gap: 16 },
     loadingTxt: { fontSize: Typography.base, color: Colors.textMuted },
 
-    heroCard:    { backgroundColor: Colors.deepSea, borderRadius: Radius.lg, padding: 12, flexDirection: 'row', alignItems: 'center' },
-    heroLeft:    { flex: 1 },
-    heroLabel:   { fontSize: Typography.xs, color: Colors.textSecondary, marginBottom: 4 },
-    heroTemp:    { fontSize: 40, fontWeight: '700', color: Colors.textPrimary, fontFamily: 'Georgia', lineHeight: 44 },
-    heroLoc:     { fontSize: Typography.xs, color: Colors.textMuted, marginTop: 4 },
-    heroRight:   { alignItems: 'center', gap: 10, marginLeft: 12 },
-    heroEmoji:   { fontSize: 44, lineHeight: 50 },
-    heroChips:   { gap: 6, alignItems: 'center' },
-    heroChip:    { backgroundColor: Colors.inputBg, borderRadius: Radius.sm, paddingHorizontal: 10, paddingVertical: 5, alignItems: 'center' },
-    heroChipLbl: { fontSize: 9, color: Colors.textSecondary, letterSpacing: 0.3 },
-    heroChipVal: { fontSize: Typography.sm, fontWeight: '600', color: Colors.textPrimary, marginTop: 1 },
+    // Rich hero card
+    heroCard:     { backgroundColor: Colors.deepSea, borderRadius: Radius.lg, padding: Spacing.md },
+    heroTop:      { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 12 },
+    heroTempCol:  { flex: 1 },
+    heroLabel:    { fontSize: Typography.xs, color: Colors.textSecondary, marginBottom: 2 },
+    heroTemp:     { fontSize: 52, fontWeight: '700', color: Colors.textPrimary, fontFamily: 'Georgia', lineHeight: 56 },
+    heroCondition:{ fontSize: Typography.sm, color: Colors.textSecondary, marginTop: 2 },
+    heroEmoji:    { fontSize: 52, lineHeight: 58 },
+    heroStatGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, borderTopWidth: 0.5, borderTopColor: Colors.border, paddingTop: 10 },
+    heroStat:     { backgroundColor: Colors.inputBg, borderRadius: Radius.md, paddingHorizontal: 12, paddingVertical: 8, alignItems: 'center', minWidth: '22%', flex: 1 },
+    heroStatLbl:  { fontSize: 9, color: Colors.textSecondary, letterSpacing: 0.3, marginBottom: 2 },
+    heroStatVal:  { fontSize: Typography.sm, fontWeight: '700', color: Colors.textPrimary },
+    heroSparkRow: { marginTop: 10, borderTopWidth: 0.5, borderTopColor: Colors.border, paddingTop: 10 },
+    heroSparkLbl: { fontSize: 9, color: Colors.textSecondary, letterSpacing: 0.3, marginBottom: 6 },
 
     card:      { backgroundColor: Colors.cardBg, borderRadius: Radius.lg, borderWidth: 0.5, borderColor: Colors.border, padding: Spacing.lg },
     cardTitle: { fontSize: Typography.base, fontWeight: '600', color: Colors.textPrimary, marginBottom: 2 },
     cardSub:   { fontSize: Typography.xs, color: Colors.textMuted, marginBottom: 14 },
-
-    detailRow:   { flexDirection: 'row', gap: 8 },
-    detailCard:  { flex: 1, backgroundColor: Colors.cardBg, borderRadius: Radius.md, borderWidth: 0.5, borderColor: Colors.border, padding: 12, alignItems: 'center', gap: 4 },
-    detailIcon:  { fontSize: 20 },
-    detailLabel: { fontSize: Typography.xs, color: Colors.textSecondary },
-    detailVal:   { fontSize: Typography.sm, fontWeight: '600', color: Colors.textPrimary, textAlign: 'center' },
   }), [Colors])
+
+  const precipPct  = daily?.precipitation_probability_max?.[selIdx]
+  const hiTemp     = daily?.temperature_2m_max?.[selIdx]
+  const loTemp     = daily?.temperature_2m_min?.[selIdx]
+  const maxWind    = daily?.windspeed_10m_max?.[selIdx]
+  const windDirDom = daily?.winddirection_10m_dominant?.[selIdx]
 
   return (
     <View style={s.container}>
-
-      {/* TOPBAR */}
       <View style={[s.topbar, { paddingTop: insets.top + 10 }]}>
         <TouchableOpacity onPress={() => navigation?.navigate('Dashboard')} style={s.topbarBack}>
           <Text style={s.topbarBackTxt}>‹</Text>
         </TouchableOpacity>
         <Text style={s.topbarTitle}>Weather</Text>
-        <LocationChip
-          label={weatherLocation.name}
-          onPress={() => setShowPicker(true)}
-          color="#fff"
-          boneColor={Colors.topbarBg}
-        />
+        <LocationChip label={weatherLocation.name} onPress={() => setShowPicker(true)} color="#fff" boneColor={Colors.topbarBg}/>
       </View>
 
-      {/* DAY STRIP */}
       {!loading && <WeatherDayStrip daily={daily} selectedIdx={selIdx} onSelect={setSelectedDayIdx}/>}
 
-      <ScrollView
-        contentContainerStyle={s.content}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.marshGreen}/>}
-      >
+      <ScrollView contentContainerStyle={s.content}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.marshGreen}/>}>
         {loading ? (
           <View style={s.loadingBox}>
             <ActivityIndicator size="large" color={Colors.marshGreen}/>
@@ -500,38 +566,59 @@ export default function WeatherScreen({ navigation }) {
           </View>
         ) : (
           <>
-            {/* Hero */}
+            {/* Rich hero card */}
             <View style={s.heroCard}>
-              <View style={s.heroLeft}>
-                <Text style={s.heroLabel}>
-                  {isToday ? 'Current conditions' : daily?.time[selIdx]
-                    ? new Date(daily.time[selIdx] + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })
-                    : ''}
-                </Text>
-                <Text style={s.heroTemp}>
-                  {isToday && cur
-                    ? `${Math.round(cur.temperature_2m)}°`
-                    : daily ? `${Math.round(daily.temperature_2m_max[selIdx])}°` : '—'}
-                </Text>
-                <Text style={s.heroLoc} numberOfLines={1}>{weatherLocation.name}</Text>
-              </View>
-              <View style={s.heroRight}>
-                <Text style={s.heroEmoji}>{daily ? weatherEmoji(daily.weathercode[selIdx]) : '🌤️'}</Text>
-                <View style={s.heroChips}>
-                  {daily && (
-                    <View style={s.heroChip}>
-                      <Text style={s.heroChipLbl}>High / Low</Text>
-                      <Text style={s.heroChipVal}>{Math.round(daily.temperature_2m_max[selIdx])}° / {Math.round(daily.temperature_2m_min[selIdx])}°</Text>
-                    </View>
-                  )}
-                  {daily && (
-                    <View style={s.heroChip}>
-                      <Text style={s.heroChipLbl}>Wind</Text>
-                      <Text style={s.heroChipVal}>{Math.round(daily.windspeed_10m_max[selIdx])} mph</Text>
-                    </View>
-                  )}
+              <View style={s.heroTop}>
+                <View style={s.heroTempCol}>
+                  <Text style={s.heroLabel}>
+                    {isToday ? 'Current conditions' : daily?.time[selIdx]
+                      ? new Date(daily.time[selIdx] + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })
+                      : ''}
+                  </Text>
+                  <Text style={s.heroTemp}>
+                    {isToday && cur ? `${Math.round(cur.temperature_2m)}°` : hiTemp != null ? `${Math.round(hiTemp)}°` : '—'}
+                  </Text>
+                  <Text style={s.heroCondition} numberOfLines={1}>{weatherLocation.name}</Text>
                 </View>
+                <Text style={s.heroEmoji}>{daily ? weatherEmoji(daily.weathercode[selIdx]) : '🌤️'}</Text>
               </View>
+
+              <View style={s.heroStatGrid}>
+                {hiTemp != null && loTemp != null && (
+                  <View style={s.heroStat}>
+                    <Text style={s.heroStatLbl}>HIGH / LOW</Text>
+                    <Text style={s.heroStatVal}>{Math.round(hiTemp)}° / {Math.round(loTemp)}°</Text>
+                  </View>
+                )}
+                {precipPct != null && (
+                  <View style={s.heroStat}>
+                    <Text style={s.heroStatLbl}>PRECIP %</Text>
+                    <Text style={s.heroStatVal}>{precipPct}%</Text>
+                  </View>
+                )}
+                {maxWind != null && (
+                  <View style={s.heroStat}>
+                    <Text style={s.heroStatLbl}>WIND</Text>
+                    <Text style={s.heroStatVal}>
+                      {Math.round(maxWind)} mph{windDirDom != null ? ` ${windDir(windDirDom)}` : ''}
+                    </Text>
+                  </View>
+                )}
+                {isToday && cur && (
+                  <View style={s.heroStat}>
+                    <Text style={s.heroStatLbl}>FEELS LIKE</Text>
+                    <Text style={s.heroStatVal}>{Math.round(cur.temperature_2m)}°F</Text>
+                  </View>
+                )}
+              </View>
+
+              {/* Hourly wind speed sparkline inline */}
+              {isToday && wSpeeds.length > 0 && (
+                <View style={s.heroSparkRow}>
+                  <Text style={s.heroSparkLbl}>HOURLY WIND SPEED (mph)</Text>
+                  <MiniSparkline values={wSpeeds} color={Colors.brackishWater} h={28} w={CHART_W - Spacing.md * 2}/>
+                </View>
+              )}
             </View>
 
             {/* Live radar */}
@@ -546,22 +633,19 @@ export default function WeatherScreen({ navigation }) {
               </View>
             )}
 
-            {/* Wind & details — today only */}
-            {isToday && cur && (
-              <View style={s.detailRow}>
-                {[
-                  { icon: '💨', label: 'Wind', val: `${Math.round(cur.windspeed_10m)} mph` },
-                  { icon: '🧭', label: 'Direction', val: windDir(cur.winddirection_10m) },
-                  { icon: '📍', label: 'Location', val: `${weatherLocation.lat.toFixed(2)}°N` },
-                ].map((c, i) => (
-                  <View key={i} style={s.detailCard}>
-                    <Text style={s.detailIcon}>{c.icon}</Text>
-                    <Text style={s.detailLabel}>{c.label}</Text>
-                    <Text style={s.detailVal}>{c.val}</Text>
-                  </View>
-                ))}
+            {/* Hourly wind chart — today only */}
+            {isToday && wSpeeds.length > 0 && (
+              <View style={s.card}>
+                <Text style={s.cardTitle}>Hourly wind</Text>
+                <Text style={s.cardSub}>Speed (mph) · arrows show direction</Text>
+                <WindChart speeds={wSpeeds} dirs={wDirs}/>
               </View>
             )}
+
+            {/* 10-day wind forecast */}
+            <View style={s.card}>
+              <TenDayWindStrip daily={daily}/>
+            </View>
           </>
         )}
       </ScrollView>
@@ -574,7 +658,6 @@ export default function WeatherScreen({ navigation }) {
         initialLat={weatherLocation.lat}
         initialLng={weatherLocation.lng}
       />
-
       <ForecastBubble navigation={navigation} activeRoute="Weather"/>
     </View>
   )
