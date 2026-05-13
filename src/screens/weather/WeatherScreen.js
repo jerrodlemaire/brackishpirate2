@@ -4,7 +4,7 @@ import {
   ActivityIndicator, RefreshControl, Dimensions, PanResponder, Modal,
 } from 'react-native'
 import MapView, { UrlTile, PROVIDER_GOOGLE } from 'react-native-maps'
-import Svg, { Path, G, Line, Defs, LinearGradient, Stop, Polygon } from 'react-native-svg'
+import Svg, { Path, G, Line, Defs, LinearGradient, Stop, Polygon, Circle, Polyline, Text as SvgText } from 'react-native-svg'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Typography, Spacing, Radius } from '../../constants/theme'
 import { useTheme } from '../../hooks/useTheme'
@@ -50,21 +50,29 @@ function radarFrameTime(ts) {
   return new Date(ts * 1000).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
 }
 
-// ── Wind direction arrow (SVG) ─────────────────────────────────────────────
-function WindArrow({ deg, size = 12, color }) {
-  const rad = (deg * Math.PI) / 180
-  const cx = size / 2, cy = size / 2, len = size * 0.42
-  const x2 = cx + Math.sin(rad) * len
-  const y2 = cy - Math.cos(rad) * len
-  const x1 = cx - Math.sin(rad) * len * 0.5
-  const y1 = cy + Math.cos(rad) * len * 0.5
-  const perpX = Math.cos(rad) * size * 0.12
-  const perpY = Math.sin(rad) * size * 0.12
-  const arrowPts = `${x2},${y2} ${x2 - Math.sin(rad) * size * 0.22 + Math.cos(rad) * size * 0.12},${y2 + Math.cos(rad) * size * 0.22 + Math.sin(rad) * size * 0.12} ${x2 - Math.sin(rad) * size * 0.22 - Math.cos(rad) * size * 0.12},${y2 + Math.cos(rad) * size * 0.22 - Math.sin(rad) * size * 0.12}`
+// ── Compass SVG — circle ring, N label, directional needle + arrowhead ──────
+function WindArrow({ deg, size = 18, color }) {
+  if (deg == null) return <View style={{ width: size, height: size }}/>
+  const rad       = (deg - 90) * Math.PI / 180
+  const cx = size / 2, cy = size / 2
+  const r         = size / 2 - 1.5
+  const tx        = cx + r * Math.cos(rad)
+  const ty        = cy + r * Math.sin(rad)
+  const bx        = cx - (r * 0.45) * Math.cos(rad)
+  const by        = cy - (r * 0.45) * Math.sin(rad)
+  const headLen   = size * 0.28
+  const wingAngle = 0.42
+  const w1x = tx - headLen * Math.cos(rad - wingAngle)
+  const w1y = ty - headLen * Math.sin(rad - wingAngle)
+  const w2x = tx - headLen * Math.cos(rad + wingAngle)
+  const w2y = ty - headLen * Math.sin(rad + wingAngle)
+  const nFontSize = Math.max(size * 0.28, 5)
   return (
     <Svg width={size} height={size}>
-      <Line x1={x1} y1={y1} x2={x2} y2={y2} stroke={color} strokeWidth="1.5" strokeLinecap="round"/>
-      <Polygon points={arrowPts} fill={color}/>
+      <Circle cx={cx} cy={cy} r={r} fill="none" stroke={color} strokeWidth="0.8" opacity="0.4"/>
+      <SvgText x={cx} y={cy - r + nFontSize * 0.85} textAnchor="middle" fontSize={nFontSize} fontWeight="700" fill={color} opacity="0.6">N</SvgText>
+      <Line x1={bx} y1={by} x2={tx} y2={ty} stroke={color} strokeWidth="1.4" strokeLinecap="round"/>
+      <Polyline points={`${w1x},${w1y} ${tx},${ty} ${w2x},${w2y}`} fill="none" stroke={color} strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
     </Svg>
   )
 }
@@ -380,10 +388,10 @@ function WindChart({ speeds, dirs }) {
         <View style={wc.arrowRow}>
           {arrowHours.map(h => {
             const idx = Math.min(h, dirs.length - 1)
-            if (dirs[idx] == null) return <View key={h} style={{ width: 14 }}/>
+            if (dirs[idx] == null) return <View key={h} style={{ width: 18 }}/>
             return (
               <View key={h} style={{ alignItems: 'center' }}>
-                <WindArrow deg={dirs[idx]} size={14} color={`${Colors.brackishWater}CC`}/>
+                <WindArrow deg={dirs[idx]} size={18} color={`${Colors.brackishWater}CC`}/>
               </View>
             )
           })}
@@ -402,7 +410,7 @@ function TenDayWindStrip({ daily }) {
     row:     { flexDirection: 'row', alignItems: 'center', paddingVertical: 9, borderBottomWidth: 0.5, borderBottomColor: Colors.border, gap: 8 },
     day:     { width: 38, fontSize: Typography.sm, color: Colors.textSecondary, fontWeight: '500' },
     dayToday:{ color: Colors.brackishWater, fontWeight: '700' },
-    arrow:   { width: 18, alignItems: 'center' },
+    arrow:   { width: 22, alignItems: 'center' },
     barWrap: { flex: 1, height: 6, backgroundColor: Colors.inputBg, borderRadius: 3, overflow: 'hidden' },
     bar:     { height: '100%', borderRadius: 3, backgroundColor: Colors.brackishWater },
     speed:   { width: 52, fontSize: Typography.sm, fontWeight: '600', color: Colors.textPrimary, textAlign: 'right' },
@@ -427,7 +435,7 @@ function TenDayWindStrip({ daily }) {
           <View key={i} style={ws.row}>
             <Text style={[ws.day, isToday && ws.dayToday]}>{dayName}</Text>
             <View style={ws.arrow}>
-              {dir != null && <WindArrow deg={dir} size={16} color={barColor}/>}
+              {dir != null && <WindArrow deg={dir} size={20} color={barColor}/>}
             </View>
             <View style={ws.barWrap}>
               <View style={[ws.bar, { width: `${barW}%`, backgroundColor: barColor }]}/>
