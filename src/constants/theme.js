@@ -18,10 +18,10 @@ export function getTheme(mode = 'dark') {
     tabBarBg: '#0D2137',
 
     // Surface — mode-dependent
-    midnightTide: d ? '#1A3A52' : '#F0EBE0',
+    midnightTide: '#1A3A52',
     deepSea:      d ? '#0D2137' : '#FFFFFF',
     cardBg:       d ? '#0D2137' : '#FFFFFF',
-    screenBg:     d ? '#1A3A52' : '#F0EBE0',
+    screenBg:     '#1A3A52',
     inputBg:      d ? 'rgba(255,255,255,0.06)' : '#F7F3EC',
     inputBorder:  d ? 'rgba(255,255,255,0.15)'  : 'rgba(13,33,55,0.12)',
 
