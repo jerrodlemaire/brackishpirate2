@@ -11,6 +11,7 @@ import { getSolunarForDate, buildActivityCurve, scoreColor, scoreLabel } from '.
 import { fetchTideHourly } from '../../utils/tides'
 import { fetchWeatherAndForecast, fetchMarineData, fetchWaterTemp, windDir, getWindColor } from '../../utils/weather'
 import JollyRoger from '../../components/JollyRoger'
+import WindCompass from '../../components/WindCompass'
 import HomePortPicker from '../../components/HomePortPicker'
 import { useApp } from '../../context/AppContext'
 import { useDataLocation } from '../../hooks/useDataLocation'
@@ -343,7 +344,12 @@ export default function DashboardScreen({ navigation }) {
         <TouchableOpacity style={[s.dataCard, s.dataCardTeal]} onPress={() => navigation.navigate('Weather')} activeOpacity={0.8}>
           <Text style={s.dataCardLabel}>WIND</Text>
           <Text style={[s.dataCardVal, { color: windSpd !== null ? getWindColor(windSpd) : Colors.brackishWater }]}>{windSpd !== null ? `${windSpd} mph` : '—'}</Text>
-          <Text style={s.dataCardSub}>{windDirStr || 'Loading…'}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 6 }}>
+            {weather?.current?.winddirection_10m != null && (
+              <WindCompass deg={weather.current.winddirection_10m} size={22} color={windSpd !== null ? getWindColor(windSpd) : Colors.brackishWater}/>
+            )}
+            <Text style={[s.dataCardSub, { marginBottom: 0 }]}>{windDirStr || 'Loading…'}</Text>
+          </View>
           <MiniSparkline values={windSpark} color={windSpd !== null ? getWindColor(windSpd) : Colors.brackishWater}/>
         </TouchableOpacity>
 
