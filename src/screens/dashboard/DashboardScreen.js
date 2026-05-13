@@ -220,13 +220,6 @@ export default function DashboardScreen({ navigation }) {
   const todayHigh  = weather?.daily?.temperature_2m_max?.[0]
   const todayLow   = weather?.daily?.temperature_2m_min?.[0]
 
-  const chips = [
-    { label: 'Air',   val: airTemp   !== null ? `${airTemp}°F`  : '—', dot: airTemp != null && airTemp > 95 ? Colors.doubloonGold : Colors.marshGreen },
-    { label: 'Water', val: waterTemp !== null ? `${Math.round(waterTemp)}°F` : '—', dot: waterTemp != null && waterTemp >= 68 && waterTemp <= 82 ? Colors.marshGreen : Colors.doubloonGold },
-    { label: 'Wind',  val: windSpd   !== null ? `${windDirStr} ${windSpd}` : '—', dot: windSpd != null && windSpd > 20 ? Colors.textSecondary : windSpd > 12 ? Colors.doubloonGold : Colors.marshGreen },
-    { label: 'Tide',  val: curTide   !== null ? `${tideRising ? '↑' : '↓'}${curTide.toFixed(1)}` : '—', dot: tideRising ? Colors.marshGreen : Colors.doubloonGold },
-  ]
-
   const tideSpark  = hourlyTide.length > 0 ? hourlyTide.slice(0, 24).map(p => parseFloat(p.v)) : null
   const waveSpark  = marine?.hourlyWaves?.filter(v => v != null).length > 0 ? marine.hourlyWaves : null
   const windSpark  = weather?.hourlyWindSpeeds?.length > 0 ? weather.hourlyWindSpeeds : null
@@ -275,12 +268,6 @@ export default function DashboardScreen({ navigation }) {
     dataCardLabel: { fontSize: 9, fontWeight: '700', color: Colors.textSecondary, letterSpacing: 1.2, marginBottom: 2 },
     dataCardVal:   { fontSize: Typography.lg, fontWeight: '700', fontFamily: 'Georgia' },
     dataCardSub:   { fontSize: Typography.xs, color: Colors.textSecondary, marginBottom: 6 },
-
-    chipRow:   { flexDirection: 'row', paddingHorizontal: 12, gap: 8, marginBottom: Spacing.md },
-    condChip:  { flex: 1, backgroundColor: Colors.cardBg, borderRadius: Radius.md, borderWidth: 0.5, borderColor: Colors.border, paddingVertical: 10, alignItems: 'center', gap: 3 },
-    condDot:   { width: 6, height: 6, borderRadius: 3 },
-    condVal:   { fontSize: Typography.sm, fontWeight: '700', color: Colors.textPrimary },
-    condLabel: { fontSize: 9, color: Colors.textSecondary, letterSpacing: 0.3 },
 
     chartCard:  { backgroundColor: Colors.deepSea, marginHorizontal: 12, borderRadius: Radius.lg, padding: Spacing.md, marginBottom: Spacing.md },
     chartHd:    { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
@@ -380,17 +367,6 @@ export default function DashboardScreen({ navigation }) {
           <Text style={[s.dataCardVal, { color: Colors.brackishWater }]}>{waterTemp !== null ? `${Math.round(waterTemp)}°F` : '—'}</Text>
           <Text style={s.dataCardSub}>Surface · NOAA</Text>
         </TouchableOpacity>
-      </View>
-
-      {/* CONDITION STRIP */}
-      <View style={s.chipRow}>
-        {chips.map((c, i) => (
-          <TouchableOpacity key={i} style={s.condChip} activeOpacity={0.75}>
-            <View style={[s.condDot, { backgroundColor: c.dot }]}/>
-            <Text style={s.condVal}>{c.val}</Text>
-            <Text style={s.condLabel}>{c.label}</Text>
-          </TouchableOpacity>
-        ))}
       </View>
 
       {/* FISH ACTIVITY WAVE */}
