@@ -1,12 +1,14 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useMemo } from 'react'
 import {
   View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Modal,
 } from 'react-native'
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps'
-import { Colors, Typography, Radius } from '../constants/theme'
+import { Typography, Radius } from '../constants/theme'
+import { useTheme } from '../hooks/useTheme'
 import { fetchNoaaStations } from '../utils/tides'
 
 export default function TideStationPickerModal({ visible, onClose, onSelect, currentStationId }) {
+  const { Colors } = useTheme()
   const mapRef    = useRef(null)
   const [stations, setStations]   = useState([])
   const [loading,  setLoading]    = useState(false)
@@ -14,6 +16,27 @@ export default function TideStationPickerModal({ visible, onClose, onSelect, cur
     latitude: 29.865, longitude: -89.674, latitudeDelta: 6, longitudeDelta: 6,
   })
   const [selected, setSelected] = useState(null)
+
+  const s = useMemo(() => StyleSheet.create({
+    container:      { flex: 1, backgroundColor: Colors.topbarBg },
+    header:         { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 52, paddingBottom: 10, backgroundColor: Colors.topbarBg, gap: 12 },
+    closeBtn:       { padding: 4 },
+    closeTxt:       { fontSize: 18, color: '#fff' },
+    title:          { flex: 1, fontSize: Typography.md, fontWeight: '700', color: '#fff', fontFamily: 'Georgia' },
+    hint:           { fontSize: Typography.xs, color: 'rgba(255,255,255,0.4)', textAlign: 'center', paddingBottom: 6, backgroundColor: Colors.topbarBg },
+    map:            { flex: 1 },
+    marker:         { width: 26, height: 26, borderRadius: 13, backgroundColor: Colors.brackishWater, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: 'rgba(255,255,255,0.7)' },
+    markerCurrent:  { backgroundColor: Colors.doubloonGold },
+    markerSelected: { backgroundColor: Colors.marshGreen, borderColor: '#fff', borderWidth: 2.5, width: 30, height: 30, borderRadius: 15 },
+    markerTxt:      { fontSize: 11, fontWeight: '700', color: '#fff' },
+    card:           { backgroundColor: '#1A3A52', padding: 20, flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 76, borderTopWidth: 0.5, borderTopColor: 'rgba(255,255,255,0.08)' },
+    cardInfo:       { flex: 1 },
+    cardName:       { fontSize: Typography.md, fontWeight: '600', color: '#fff' },
+    cardSub:        { fontSize: Typography.sm, color: 'rgba(255,255,255,0.45)', marginTop: 3 },
+    useBtn:         { backgroundColor: Colors.brackishWater, borderRadius: Radius.md, paddingHorizontal: 16, paddingVertical: 10 },
+    useBtnTxt:      { fontSize: Typography.sm, fontWeight: '700', color: '#fff' },
+    hintCard:       { flex: 1, fontSize: Typography.sm, color: 'rgba(255,255,255,0.4)', textAlign: 'center' },
+  }), [Colors])
 
   useEffect(() => {
     if (!visible) return
@@ -58,6 +81,8 @@ export default function TideStationPickerModal({ visible, onClose, onSelect, cur
           provider={PROVIDER_GOOGLE}
           mapType="satellite"
           initialRegion={region}
+          minZoomLevel={3}
+          maxZoomLevel={18}
           onRegionChangeComplete={setRegion}
         >
           {visibleStations.map(st => {
@@ -105,24 +130,3 @@ export default function TideStationPickerModal({ visible, onClose, onSelect, cur
     </Modal>
   )
 }
-
-const s = StyleSheet.create({
-  container:      { flex: 1, backgroundColor: Colors.deepSea },
-  header:         { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 52, paddingBottom: 10, backgroundColor: Colors.deepSea, gap: 12 },
-  closeBtn:       { padding: 4 },
-  closeTxt:       { fontSize: 18, color: '#fff' },
-  title:          { flex: 1, fontSize: Typography.md, fontWeight: '700', color: '#fff', fontFamily: 'Georgia' },
-  hint:           { fontSize: Typography.xs, color: 'rgba(255,255,255,0.4)', textAlign: 'center', paddingBottom: 6, backgroundColor: Colors.deepSea },
-  map:            { flex: 1 },
-  marker:         { width: 26, height: 26, borderRadius: 13, backgroundColor: Colors.brackishWater, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: 'rgba(255,255,255,0.7)' },
-  markerCurrent:  { backgroundColor: Colors.doubloonGold },
-  markerSelected: { backgroundColor: Colors.marshGreen, borderColor: '#fff', borderWidth: 2.5, width: 30, height: 30, borderRadius: 15 },
-  markerTxt:      { fontSize: 11, fontWeight: '700', color: '#fff' },
-  card:           { backgroundColor: Colors.midnightTide, padding: 20, flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 76, borderTopWidth: 0.5, borderTopColor: 'rgba(255,255,255,0.08)' },
-  cardInfo:       { flex: 1 },
-  cardName:       { fontSize: Typography.md, fontWeight: '600', color: '#fff' },
-  cardSub:        { fontSize: Typography.sm, color: 'rgba(255,255,255,0.45)', marginTop: 3 },
-  useBtn:         { backgroundColor: Colors.brackishWater, borderRadius: Radius.md, paddingHorizontal: 16, paddingVertical: 10 },
-  useBtnTxt:      { fontSize: Typography.sm, fontWeight: '700', color: '#fff' },
-  hintCard:       { flex: 1, fontSize: Typography.sm, color: 'rgba(255,255,255,0.4)', textAlign: 'center' },
-})

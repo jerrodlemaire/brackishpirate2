@@ -1,9 +1,9 @@
 import React from 'react'
 import { TouchableOpacity, Text, StyleSheet } from 'react-native'
-import { Colors, Typography, Radius, Spacing } from '../constants/theme'
+import { Typography, Radius, Spacing } from '../constants/theme'
 import JollyRoger from './JollyRoger'
 
-export default function LocationChip({ label, onPress, color = Colors.brackishWater, boneColor = 'rgba(0,0,0,0.3)' }) {
+export default function LocationChip({ label, onPress, color = '#4A8FA8', boneColor = 'rgba(0,0,0,0.3)' }) {
   return (
     <TouchableOpacity
       style={[st.chip, { backgroundColor: color + '22', borderColor: color + '55' }]}

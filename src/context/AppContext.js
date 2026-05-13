@@ -16,18 +16,21 @@ export const DEFAULT_STATION = {
 }
 
 export function AppProvider({ children }) {
-  const [homePort,       setHomePortState]       = useState(DEFAULT_HOME_PORT)
-  const [activeStation,  setActiveStationState]  = useState(DEFAULT_STATION)
+  const [homePort,        setHomePortState]        = useState(DEFAULT_HOME_PORT)
+  const [activeStation,   setActiveStationState]   = useState(DEFAULT_STATION)
+  const [riverFavorites,  setRiverFavoritesState]  = useState([])
 
   useEffect(() => {
     const load = async () => {
       try {
-        const [hp, st] = await Promise.all([
+        const [hp, st, rf] = await Promise.all([
           AsyncStorage.getItem('homePort'),
           AsyncStorage.getItem('activeStation'),
+          AsyncStorage.getItem('riverFavorites'),
         ])
         if (hp) setHomePortState(JSON.parse(hp))
         if (st) setActiveStationState(JSON.parse(st))
+        if (rf) setRiverFavoritesState(JSON.parse(rf))
       } catch (_) {}
     }
     load()
@@ -51,8 +54,18 @@ export function AppProvider({ children }) {
     await AsyncStorage.setItem('activeStation', JSON.stringify(st))
   }, [])
 
+  const toggleRiverFavorite = useCallback(async (stationId) => {
+    setRiverFavoritesState(prev => {
+      const next = prev.includes(stationId)
+        ? prev.filter(id => id !== stationId)
+        : [...prev, stationId]
+      AsyncStorage.setItem('riverFavorites', JSON.stringify(next))
+      return next
+    })
+  }, [])
+
   return (
-    <AppContext.Provider value={{ homePort, setHomePort, activeStation, setActiveStation }}>
+    <AppContext.Provider value={{ homePort, setHomePort, activeStation, setActiveStation, riverFavorites, toggleRiverFavorite }}>
       {children}
     </AppContext.Provider>
   )

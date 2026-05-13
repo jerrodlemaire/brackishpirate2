@@ -1,174 +1,272 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect, useRef, useMemo } from 'react'
 import {
-  View, Text, StyleSheet, TextInput, TouchableOpacity,
-  FlatList, ActivityIndicator, Modal, KeyboardAvoidingView, Platform,
+  View, Text, StyleSheet, TouchableOpacity,
+  ActivityIndicator, Modal,
 } from 'react-native'
+import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps'
 import * as Location from 'expo-location'
-import { Colors, Typography, Spacing, Radius } from '../constants/theme'
+import { Typography, Spacing, Radius } from '../constants/theme'
+import { useTheme } from '../hooks/useTheme'
 import { useApp } from '../context/AppContext'
+import { fetchNdbcBuoys } from '../utils/ndbc'
 
-const GOOGLE_KEY = 'AIzaSyBzwOhq7uIKao4Xw4Bht-op0y4Yj3Umpaw'
+const GOOGLE_MAPS_KEY = 'AIzaSyBzwOhq7uIKao4Xw4Bht-op0y4Yj3Umpaw'
+
+const DEFAULT_REGION = {
+  latitude:      30.0,
+  longitude:    -90.0,
+  latitudeDelta:  12,
+  longitudeDelta: 14,
+}
+
+async function reverseGeocode(lat, lng) {
+  try {
+    const url  = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${GOOGLE_MAPS_KEY}`
+    const res  = await fetch(url)
+    const data = await res.json()
+    return data.results?.[0]?.formatted_address || `${lat.toFixed(4)}° N, ${Math.abs(lng).toFixed(4)}° W`
+  } catch {
+    return `${lat.toFixed(4)}° N, ${Math.abs(lng).toFixed(4)}° W`
+  }
+}
 
 export default function HomePortPicker({ visible, onClose }) {
-  const { setHomePort } = useApp()
-  const [query,      setQuery]      = useState('')
-  const [results,    setResults]    = useState([])
-  const [loading,    setLoading]    = useState(false)
+  const { Colors } = useTheme()
+  const { homePort, setHomePort } = useApp()
+  const mapRef = useRef(null)
+
+  const [buoys,      setBuoys]      = useState([])
+  const [loading,    setLoading]    = useState(true)
+  const [mapRegion,  setMapRegion]  = useState(DEFAULT_REGION)
+  const [pending,    setPending]    = useState(null)
   const [gpsLoading, setGpsLoading] = useState(false)
-  const [error,      setError]      = useState(null)
+  const [pinLoading, setPinLoading] = useState(false)
+  const [saving,     setSaving]     = useState(false)
 
-  const search = async () => {
-    if (!query.trim()) return
+  const s = useMemo(() => StyleSheet.create({
+    container: { flex: 1, backgroundColor: Colors.topbarBg },
+
+    header:   { flexDirection: 'row', alignItems: 'center', padding: Spacing.lg, borderBottomWidth: 0.5, borderBottomColor: 'rgba(255,255,255,0.1)' },
+    title:    { fontSize: Typography.lg, fontWeight: '700', color: '#fff', fontFamily: 'Georgia' },
+    sub:      { fontSize: Typography.xs, color: 'rgba(255,255,255,0.45)', marginTop: 2 },
+    closeBtn: { padding: 6 },
+    closeTxt: { fontSize: 18, color: 'rgba(255,255,255,0.6)' },
+
+    mapWrap: { flex: 1, position: 'relative' },
+    map:     { flex: 1 },
+
+    loadingOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(13,33,55,0.7)', alignItems: 'center', justifyContent: 'center', gap: 12 },
+    loadingTxt:     { fontSize: Typography.base, color: '#fff', fontWeight: '500' },
+
+    myLocBtn:  { position: 'absolute', top: 12, left: 12, backgroundColor: Colors.brackishWater, borderRadius: Radius.lg, paddingHorizontal: 14, paddingVertical: 9, flexDirection: 'row', alignItems: 'center' },
+    myLocTxt:  { fontSize: Typography.sm, color: '#fff', fontWeight: '600' },
+
+    gpsBtn:    { position: 'absolute', top: 12, right: 12, width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(13,33,55,0.92)', borderWidth: 0.5, borderColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' },
+    gpsBtnTxt: { fontSize: 18, color: Colors.brackishWater },
+
+    hint:    { position: 'absolute', bottom: 16, left: 16, right: 16, backgroundColor: 'rgba(13,33,55,0.85)', borderRadius: Radius.md, paddingVertical: 8, paddingHorizontal: 12, alignItems: 'center' },
+    hintTxt: { fontSize: Typography.xs, color: 'rgba(255,255,255,0.65)' },
+
+    homeMarker:    { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(13,33,55,0.9)', borderWidth: 2, borderColor: Colors.doubloonGold, alignItems: 'center', justifyContent: 'center' },
+    pinMarker:     { alignItems: 'center' },
+    buoyMarker:    { backgroundColor: Colors.brackishWater, borderRadius: 4, paddingHorizontal: 5, paddingVertical: 2, borderWidth: 1, borderColor: '#fff' },
+    buoyMarkerSel: { backgroundColor: Colors.doubloonGold, borderColor: '#fff', borderWidth: 2 },
+    buoyTxt:       { fontSize: 8, color: '#fff', fontWeight: '700' },
+
+    card:       { backgroundColor: Colors.topbarBg, borderTopWidth: 0.5, borderTopColor: 'rgba(255,255,255,0.1)', padding: Spacing.lg, paddingBottom: 32, gap: 14 },
+    cardRow:    { flexDirection: 'row', alignItems: 'center', gap: 12 },
+    cardIcon:   { width: 44, height: 44, borderRadius: 22, backgroundColor: `${Colors.brackishWater}26`, alignItems: 'center', justifyContent: 'center' },
+    cardName:   { fontSize: Typography.base, fontWeight: '600', color: '#fff' },
+    cardMeta:   { fontSize: Typography.xs, color: 'rgba(255,255,255,0.45)', marginTop: 2 },
+    cardClose:  { padding: 4 },
+    confirmBtn: { backgroundColor: Colors.brackishWater, borderRadius: Radius.md, paddingVertical: 13, alignItems: 'center' },
+    confirmTxt: { fontSize: Typography.base, color: '#fff', fontWeight: '700' },
+  }), [Colors])
+
+  useEffect(() => {
+    if (!visible) return
+    setPending(null)
     setLoading(true)
-    setError(null)
-    try {
-      const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(query)}&key=${GOOGLE_KEY}`
-      const res  = await fetch(url)
-      const data = await res.json()
-      if (data.status === 'OK') {
-        setResults(data.results)
-      } else {
-        setResults([])
-        setError('No results found. Try a different search.')
-      }
-    } catch (_) {
-      setError('Search failed. Check your connection.')
-    } finally {
-      setLoading(false)
-    }
-  }
+    fetchNdbcBuoys()
+      .then(all => setBuoys(all.filter(b => b.lat > 10 && b.lat < 55 && b.lng > -140 && b.lng < -50)))
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [visible])
 
-  const useGPS = async () => {
+  const goToGPS = async () => {
     setGpsLoading(true)
-    setError(null)
     try {
       const { status } = await Location.requestForegroundPermissionsAsync()
-      if (status !== 'granted') {
-        setError('Location permission denied.')
-        return
-      }
+      if (status !== 'granted') return
       const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced })
       const { latitude, longitude } = loc.coords
-      const url  = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${latitude},${longitude}&key=${GOOGLE_KEY}`
-      const res  = await fetch(url)
-      const data = await res.json()
-      const name = data.results?.[0]?.formatted_address || 'Current Location'
-      await setHomePort({ name, lat: latitude, lng: longitude })
-      handleClose()
-    } catch (_) {
-      setError('Could not get your location.')
-    } finally {
-      setGpsLoading(false)
-    }
+      mapRef.current?.animateToRegion({ latitude, longitude, latitudeDelta: 0.5, longitudeDelta: 0.5 }, 800)
+    } catch (_) {}
+    finally { setGpsLoading(false) }
   }
 
-  const select = async (result) => {
-    const { lat, lng } = result.geometry.location
-    await setHomePort({ name: result.formatted_address, lat, lng })
-    handleClose()
+  const useMyLocation = async () => {
+    setGpsLoading(true)
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync()
+      if (status !== 'granted') return
+      const loc  = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced })
+      const { latitude: lat, longitude: lng } = loc.coords
+      mapRef.current?.animateToRegion({ latitude: lat, longitude: lng, latitudeDelta: 0.5, longitudeDelta: 0.5 }, 600)
+      const name = await reverseGeocode(lat, lng)
+      setPending({ type: 'location', name, lat, lng })
+    } catch (_) {}
+    finally { setGpsLoading(false) }
   }
 
-  const handleClose = () => {
-    setQuery('')
-    setResults([])
-    setError(null)
+  const handleLongPress = async (e) => {
+    const { latitude: lat, longitude: lng } = e.nativeEvent.coordinate
+    setPinLoading(true)
+    const name = await reverseGeocode(lat, lng)
+    setPending({ type: 'location', name, lat, lng })
+    setPinLoading(false)
+  }
+
+  const selectBuoy = (buoy) => {
+    setPending({ type: 'buoy', name: `${buoy.name} (NDBC ${buoy.id})`, lat: buoy.lat, lng: buoy.lng, id: buoy.id })
+  }
+
+  const confirm = async () => {
+    if (!pending) return
+    setSaving(true)
+    await setHomePort({ name: pending.name, lat: pending.lat, lng: pending.lng })
+    setSaving(false)
+    setPending(null)
     onClose()
   }
 
-  return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={handleClose}>
-      <KeyboardAvoidingView style={s.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+  const handleClose = () => { setPending(null); onClose() }
 
+  const visibleBuoys = buoys.filter(b =>
+    b.lat >= mapRegion.latitude  - mapRegion.latitudeDelta  * 1.5 &&
+    b.lat <= mapRegion.latitude  + mapRegion.latitudeDelta  * 1.5 &&
+    b.lng >= mapRegion.longitude - mapRegion.longitudeDelta * 1.5 &&
+    b.lng <= mapRegion.longitude + mapRegion.longitudeDelta * 1.5
+  ).slice(0, 80)
+
+  return (
+    <Modal visible={visible} animationType="slide" onRequestClose={handleClose}>
+      <View style={s.container}>
+
+        {/* Header */}
         <View style={s.header}>
-          <Text style={s.title}>Set Home Port</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={s.title}>Set Home Port</Text>
+            <Text style={s.sub}>Use your location, long-press the map, or tap a buoy</Text>
+          </View>
           <TouchableOpacity onPress={handleClose} style={s.closeBtn}>
             <Text style={s.closeTxt}>✕</Text>
           </TouchableOpacity>
         </View>
 
-        <TouchableOpacity style={s.gpsBtn} onPress={useGPS} disabled={gpsLoading} activeOpacity={0.7}>
-          {gpsLoading
-            ? <ActivityIndicator size="small" color={Colors.brackishWater}/>
-            : <Text style={s.gpsTxt}>📍  Use my current GPS location</Text>
-          }
-        </TouchableOpacity>
+        {/* Map */}
+        <View style={s.mapWrap}>
+          <MapView
+            ref={mapRef}
+            style={s.map}
+            provider={PROVIDER_GOOGLE}
+            mapType="satellite"
+            initialRegion={DEFAULT_REGION}
+            showsUserLocation
+            showsMyLocationButton={false}
+            showsCompass={false}
+            minZoomLevel={3}
+            maxZoomLevel={18}
+            onRegionChangeComplete={setMapRegion}
+            onLongPress={handleLongPress}
+          >
+            {/* Current home port */}
+            <Marker coordinate={{ latitude: homePort.lat, longitude: homePort.lng }}
+              anchor={{ x: 0.5, y: 0.5 }} zIndex={10}>
+              <View style={s.homeMarker}>
+                <Text style={{ fontSize: 18 }}>⚓</Text>
+              </View>
+            </Marker>
 
-        <View style={s.dividerRow}>
-          <View style={s.divider}/>
-          <Text style={s.dividerTxt}>or search</Text>
-          <View style={s.divider}/>
-        </View>
+            {/* Pending custom-location pin */}
+            {pending?.type === 'location' && (
+              <Marker coordinate={{ latitude: pending.lat, longitude: pending.lng }}
+                anchor={{ x: 0.5, y: 1 }} zIndex={9}>
+                <View style={s.pinMarker}>
+                  <Text style={{ fontSize: 22 }}>📍</Text>
+                </View>
+              </Marker>
+            )}
 
-        <View style={s.searchRow}>
-          <TextInput
-            style={s.input}
-            placeholder="Bay, marina, city, or coastal area…"
-            placeholderTextColor={Colors.textMuted}
-            value={query}
-            onChangeText={setQuery}
-            onSubmitEditing={search}
-            returnKeyType="search"
-            autoCapitalize="words"
-          />
-          <TouchableOpacity style={s.searchBtn} onPress={search} disabled={loading}>
-            {loading
+            {/* NDBC buoy markers */}
+            {visibleBuoys.map(buoy => {
+              const isSel = pending?.type === 'buoy' && pending?.id === buoy.id
+              return (
+                <Marker key={buoy.id}
+                  coordinate={{ latitude: buoy.lat, longitude: buoy.lng }}
+                  anchor={{ x: 0.5, y: 0.5 }}
+                  onPress={() => selectBuoy(buoy)}
+                  tracksViewChanges={isSel}
+                  zIndex={isSel ? 8 : 1}
+                >
+                  <View style={[s.buoyMarker, isSel && s.buoyMarkerSel]} pointerEvents="none">
+                    <Text style={s.buoyTxt}>{buoy.id}</Text>
+                  </View>
+                </Marker>
+              )
+            })}
+          </MapView>
+
+          {(loading || pinLoading) && (
+            <View style={s.loadingOverlay}>
+              <ActivityIndicator size="large" color={Colors.brackishWater}/>
+              <Text style={s.loadingTxt}>{pinLoading ? 'Getting location…' : 'Loading buoys…'}</Text>
+            </View>
+          )}
+
+          {/* Use my location button */}
+          <TouchableOpacity style={s.myLocBtn} onPress={useMyLocation} disabled={gpsLoading} activeOpacity={0.85}>
+            {gpsLoading
               ? <ActivityIndicator size="small" color="#fff"/>
-              : <Text style={s.searchBtnTxt}>Search</Text>
+              : <Text style={s.myLocTxt}>📍  Use my location</Text>
             }
           </TouchableOpacity>
+
+          {/* Pan-to-GPS button */}
+          <TouchableOpacity style={s.gpsBtn} onPress={goToGPS} disabled={gpsLoading}>
+            <Text style={s.gpsBtnTxt}>◎</Text>
+          </TouchableOpacity>
+
+          {!loading && !pending && (
+            <View style={s.hint}>
+              <Text style={s.hintTxt}>Long-press anywhere · or tap an NDBC buoy</Text>
+            </View>
+          )}
         </View>
 
-        {error && <Text style={s.error}>{error}</Text>}
-
-        <FlatList
-          data={results}
-          keyExtractor={(_, i) => String(i)}
-          keyboardShouldPersistTaps="handled"
-          renderItem={({ item }) => (
-            <TouchableOpacity style={s.result} onPress={() => select(item)} activeOpacity={0.7}>
-              <Text style={s.resultIcon}>⚓</Text>
-              <Text style={s.resultName} numberOfLines={2}>{item.formatted_address}</Text>
+        {/* Confirm card */}
+        {pending && (
+          <View style={s.card}>
+            <View style={s.cardRow}>
+              <View style={s.cardIcon}>
+                <Text style={{ fontSize: 22 }}>{pending.type === 'buoy' ? '🌊' : '📍'}</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={s.cardName} numberOfLines={2}>{pending.name}</Text>
+                <Text style={s.cardMeta}>{pending.lat.toFixed(4)}° N, {Math.abs(pending.lng).toFixed(4)}° W</Text>
+              </View>
+              <TouchableOpacity onPress={() => setPending(null)} style={s.cardClose}>
+                <Text style={s.closeTxt}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <TouchableOpacity style={s.confirmBtn} onPress={confirm} disabled={saving} activeOpacity={0.8}>
+              {saving
+                ? <ActivityIndicator size="small" color="#fff"/>
+                : <Text style={s.confirmTxt}>⚓  Set as Home Port</Text>}
             </TouchableOpacity>
-          )}
-          ItemSeparatorComponent={() => <View style={s.sep}/>}
-          contentContainerStyle={{ paddingBottom: 40 }}
-          ListEmptyComponent={
-            !loading && query.length > 0 && results.length === 0 && !error
-              ? <Text style={s.empty}>Try "Shell Beach, LA" or "Grand Isle" …</Text>
-              : null
-          }
-        />
-      </KeyboardAvoidingView>
+          </View>
+        )}
+      </View>
     </Modal>
   )
 }
-
-const s = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.saltWhite },
-
-  header:   { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: Spacing.lg, borderBottomWidth: 0.5, borderBottomColor: Colors.border },
-  title:    { fontSize: Typography.lg, fontWeight: '700', color: Colors.textPrimary, fontFamily: 'Georgia' },
-  closeBtn: { padding: 4 },
-  closeTxt: { fontSize: 18, color: Colors.textSecondary },
-
-  gpsBtn:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', margin: Spacing.lg, backgroundColor: 'rgba(74,143,168,0.1)', borderRadius: Radius.md, paddingVertical: 14, borderWidth: 0.5, borderColor: Colors.brackishWater },
-  gpsTxt:  { fontSize: Typography.base, color: Colors.brackishWater, fontWeight: '600' },
-
-  dividerRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: Spacing.lg, marginBottom: Spacing.md },
-  divider:    { flex: 1, height: 0.5, backgroundColor: Colors.border },
-  dividerTxt: { fontSize: Typography.xs, color: Colors.textMuted, marginHorizontal: 10 },
-
-  searchRow: { flexDirection: 'row', paddingHorizontal: Spacing.lg, gap: 8, marginBottom: Spacing.sm },
-  input:     { flex: 1, backgroundColor: Colors.cardBg, borderRadius: Radius.md, borderWidth: 0.5, borderColor: Colors.border, paddingHorizontal: 14, paddingVertical: 12, fontSize: Typography.base, color: Colors.textPrimary },
-  searchBtn: { backgroundColor: Colors.brackishWater, borderRadius: Radius.md, paddingHorizontal: 16, justifyContent: 'center', alignItems: 'center' },
-  searchBtnTxt:{ fontSize: Typography.sm, color: '#fff', fontWeight: '700' },
-
-  error: { fontSize: Typography.sm, color: '#c0392b', paddingHorizontal: Spacing.lg, marginBottom: Spacing.sm },
-
-  result:     { flexDirection: 'row', alignItems: 'flex-start', gap: 12, paddingHorizontal: Spacing.lg, paddingVertical: 14 },
-  resultIcon: { fontSize: 16, marginTop: 1 },
-  resultName: { flex: 1, fontSize: Typography.base, color: Colors.textPrimary, lineHeight: 22 },
-  sep:        { height: 0.5, backgroundColor: Colors.border, marginLeft: Spacing.lg + 28 },
-
-  empty: { textAlign: 'center', color: Colors.textMuted, fontSize: Typography.sm, marginTop: 24, paddingHorizontal: 32 },
-})

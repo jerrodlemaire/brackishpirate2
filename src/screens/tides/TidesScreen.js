@@ -1,18 +1,19 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react'
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  ActivityIndicator, RefreshControl, Dimensions, PanResponder, Modal,
+  ActivityIndicator, RefreshControl, Dimensions, PanResponder,
 } from 'react-native'
-import Svg, { Path, Defs, LinearGradient, Stop } from 'react-native-svg'
+import Svg, { Path, Circle, Defs, LinearGradient, Stop } from 'react-native-svg'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import * as Haptics from 'expo-haptics'
-import { Colors, Typography, Spacing, Radius } from '../../constants/theme'
+import { Typography, Spacing, Radius } from '../../constants/theme'
+import { useTheme } from '../../hooks/useTheme'
 import { fetchTideHourly, fetchTideHiLo } from '../../utils/tides'
 import { getSolunarForDate, scoreColor } from '../../utils/solunar'
 import { useDataLocation } from '../../hooks/useDataLocation'
 import LocationChip from '../../components/LocationChip'
 import TideStationPickerModal from '../../components/TideStationPickerModal'
-import TidesCalendar from '../../components/TidesCalendar'
+import ForecastBubble from '../../components/ForecastBubble'
 
 const { width } = Dimensions.get('window')
 const CHART_W = width - 32
@@ -52,16 +53,49 @@ function smoothBezierPath(pts) {
 
 function smoothAreaPath(pts, bottomY) {
   if (pts.length === 0) return ''
-  const line  = smoothBezierPath(pts)
-  const last  = pts[pts.length - 1]
-  const first = pts[0]
-  return `${line} L ${last.x.toFixed(1)},${bottomY.toFixed(1)} L ${first.x.toFixed(1)},${bottomY.toFixed(1)} Z`
+  const line = smoothBezierPath(pts)
+  return `${line} L ${pts[pts.length-1].x.toFixed(1)},${bottomY.toFixed(1)} L ${pts[0].x.toFixed(1)},${bottomY.toFixed(1)} Z`
 }
 
 // ── Tide chart ────────────────────────────────────────────────────────────────
 function TideChart({ hourlyData }) {
+  const { Colors }  = useTheme()
   const [scrubIdx, setScrubIdx] = useState(null)
-  const lastHaptic               = useRef(-1)
+  const lastHaptic = useRef(-1)
+  const panRef     = useRef(null)
+  const getIdxFn   = useRef(null)
+  const valuesRef  = useRef([])
+  const stepXRef   = useRef(1)
+
+  const tc = useMemo(() => StyleSheet.create({
+    wrap:      { height: CHART_H, width: CHART_W, position: 'relative', marginBottom: 4 },
+    gridLbl:   { position: 'absolute', left: 0, width: PAD_L - 4, textAlign: 'right', fontSize: 11, fontWeight: 'bold', color: Colors.textMuted },
+    nowLine:   { position: 'absolute', top: PAD_T, bottom: PAD_B, width: 1.5, backgroundColor: Colors.doubloonGold },
+    scrubLine: { position: 'absolute', top: PAD_T, bottom: PAD_B, width: 1.5, backgroundColor: Colors.brackishWater, opacity: 0.8 },
+    bubble:    { position: 'absolute', backgroundColor: Colors.brackishWater, borderRadius: Radius.md, paddingHorizontal: 10, paddingVertical: 6, minWidth: 100, alignItems: 'center' },
+    bubbleVal: { fontSize: 16, fontWeight: '700', color: '#fff' },
+    bubbleTime:{ fontSize: 12, color: 'rgba(255,255,255,0.8)', marginTop: 1 },
+    xLbl:      { position: 'absolute', fontSize: 11, fontWeight: 'bold', color: Colors.textSecondary },
+  }), [Colors])
+
+  if (!panRef.current) {
+    panRef.current = PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder:  () => true,
+      onPanResponderGrant: (e) => {
+        const i = getIdxFn.current?.(e.nativeEvent.locationX)
+        if (i == null) return
+        setScrubIdx(i); Haptics.selectionAsync(); lastHaptic.current = i
+      },
+      onPanResponderMove: (e) => {
+        const i = getIdxFn.current?.(e.nativeEvent.locationX)
+        if (i == null) return
+        setScrubIdx(i)
+        if (i !== lastHaptic.current) { Haptics.selectionAsync(); lastHaptic.current = i }
+      },
+      onPanResponderRelease: () => { setTimeout(() => setScrubIdx(null), 2500) },
+    })
+  }
 
   if (!hourlyData || hourlyData.length === 0) {
     return (
@@ -77,30 +111,12 @@ function TideChart({ hourlyData }) {
   const range  = maxVal - minVal || 1
   const stepX  = PLOT_W / (values.length - 1)
 
-  const getIdx = (x) => {
-    const rel = x - PAD_L
-    return Math.max(0, Math.min(values.length - 1, Math.round(rel / stepX)))
-  }
+  valuesRef.current = values
+  stepXRef.current  = stepX
+  getIdxFn.current  = (x) =>
+    Math.max(0, Math.min(valuesRef.current.length - 1, Math.round((x - PAD_L) / stepXRef.current)))
 
-  const pan = PanResponder.create({
-    onStartShouldSetPanResponder: () => true,
-    onMoveShouldSetPanResponder:  () => true,
-    onPanResponderGrant: (e) => {
-      const i = getIdx(e.nativeEvent.locationX)
-      setScrubIdx(i)
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
-      lastHaptic.current = i
-    },
-    onPanResponderMove: (e) => {
-      const i = getIdx(e.nativeEvent.locationX)
-      setScrubIdx(i)
-      if (i !== lastHaptic.current) {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
-        lastHaptic.current = i
-      }
-    },
-    onPanResponderRelease: () => { setTimeout(() => setScrubIdx(null), 2500) },
-  })
+  const pan = panRef.current
 
   const pts = values.map((v, i) => ({
     x: PAD_L + i * stepX,
@@ -140,20 +156,24 @@ function TideChart({ hourlyData }) {
         <Path d={areaPath} fill="url(#tideGrad)"/>
         <Path d={linePath} fill="none" stroke={Colors.brackishWater} strokeWidth="2.5"
           strokeLinecap="round" strokeLinejoin="round"/>
+        {scrub && (
+          <>
+            <Path
+              d={`M ${PAD_L},${scrub.y.toFixed(1)} L ${scrub.x.toFixed(1)},${scrub.y.toFixed(1)}`}
+              stroke={Colors.brackishWater} strokeWidth="1" strokeDasharray="4,3" opacity="0.65"
+            />
+            <Circle cx={scrub.x.toFixed(1)} cy={scrub.y.toFixed(1)} r="4.5"
+              fill={Colors.brackishWater} stroke="#fff" strokeWidth="1.5"/>
+          </>
+        )}
       </Svg>
 
       {gridVals.map((v, i) => {
         const y = PAD_T + PLOT_H - ((v - minVal) / range) * PLOT_H
-        return (
-          <Text key={i} style={[tc.gridLbl, { top: y - 6 }]}>
-            {v.toFixed(1)}
-          </Text>
-        )
+        return <Text key={i} style={[tc.gridLbl, { top: y - 6 }]}>{v.toFixed(1)}</Text>
       })}
 
-      <View style={[tc.nowLine, { left: nowX }]}>
-        <Text style={tc.nowLbl}>NOW</Text>
-      </View>
+      <View style={[tc.nowLine, { left: nowX }]}/>
 
       {scrub && (
         <>
@@ -174,40 +194,66 @@ function TideChart({ hourlyData }) {
           top:  CHART_H - PAD_B + 5,
         }]}>{l}</Text>
       ))}
-
-      {scrubIdx === null && (
-        <Text style={tc.hint}>← slide to explore →</Text>
-      )}
     </View>
   )
 }
 
-const tc = StyleSheet.create({
-  wrap:      { height: CHART_H, width: CHART_W, position: 'relative', marginBottom: 4 },
-  gridLbl:   { position: 'absolute', left: 0, width: PAD_L - 4, textAlign: 'right', fontSize: 9, color: Colors.textMuted },
-  nowLine:   { position: 'absolute', top: PAD_T, bottom: PAD_B, width: 1.5, backgroundColor: Colors.doubloonGold },
-  nowLbl:    { position: 'absolute', top: -14, left: -12, fontSize: 8, color: Colors.doubloonGold, fontWeight: '700' },
-  scrubLine: { position: 'absolute', top: PAD_T, bottom: PAD_B, width: 1.5, backgroundColor: Colors.brackishWater, opacity: 0.8 },
-  bubble:    { position: 'absolute', backgroundColor: Colors.brackishWater, borderRadius: Radius.md, paddingHorizontal: 10, paddingVertical: 6, minWidth: 100, alignItems: 'center' },
-  bubbleVal: { fontSize: 14, fontWeight: '700', color: '#fff' },
-  bubbleTime:{ fontSize: 10, color: 'rgba(255,255,255,0.8)', marginTop: 1 },
-  xLbl:      { position: 'absolute', fontSize: 9, color: Colors.textSecondary },
-  hint:      { position: 'absolute', bottom: 6, left: 0, right: 0, textAlign: 'center', fontSize: 10, color: Colors.textMuted },
-})
-
-// ── 10-day strip ──────────────────────────────────────────────────────────────
+// ── Day strip ─────────────────────────────────────────────────────────────────
 function DayStrip({ selectedDate, onSelect }) {
-  const today = new Date()
-  const days  = Array.from({ length: 10 }, (_, i) => addDays(today, i))
+  const { Colors } = useTheme()
+
+  const ds = useMemo(() => StyleSheet.create({
+    scroll:       { backgroundColor: Colors.topbarBg },
+    content:      { paddingHorizontal: 8, paddingVertical: 10, gap: 4, alignItems: 'center' },
+    monthSep:     { justifyContent: 'center', paddingHorizontal: 10, paddingVertical: 4, marginRight: 2 },
+    monthTxt:     { fontSize: 9, fontWeight: '700', color: 'rgba(255,255,255,0.45)', letterSpacing: 0.5, textTransform: 'uppercase' },
+    pill:         { width: 54, alignItems: 'center', paddingVertical: 8, borderRadius: Radius.md, borderWidth: 0.5, borderColor: 'rgba(255,255,255,0.15)', backgroundColor: 'rgba(255,255,255,0.04)', gap: 2 },
+    pillSelected: { backgroundColor: 'rgba(255,255,255,0.22)', borderColor: '#fff' },
+    pillToday:    { borderColor: Colors.doubloonGold },
+    dayName:      { fontSize: 9, color: 'rgba(255,255,255,0.75)', fontWeight: '600', letterSpacing: 0.3 },
+    dayNum:       { fontSize: Typography.md, fontWeight: '700', color: '#fff' },
+    moon:         { fontSize: 12 },
+    tideVal:      { fontSize: 9, color: 'rgba(255,255,255,0.7)' },
+    dot:          { width: 6, height: 6, borderRadius: 3 },
+    textSel:      { color: '#fff' },
+  }), [Colors])
+
+  const today = useMemo(() => {
+    const d = new Date(); d.setHours(0, 0, 0, 0); return d
+  }, [])
+
+  const items = useMemo(() => {
+    const result = []
+    let lastMonth = -1
+    for (let i = 0; i < 120; i++) {
+      const d = addDays(today, i)
+      const m = d.getMonth()
+      if (m !== lastMonth) {
+        result.push({ type: 'month', label: d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }), key: `m-${i}` })
+        lastMonth = m
+      }
+      result.push({ type: 'day', date: d, key: `d-${i}` })
+    }
+    return result
+  }, [today])
+
   return (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={ds.scroll}
-      contentContainerStyle={ds.content}>
-      {days.map((day, i) => {
+    <ScrollView horizontal showsHorizontalScrollIndicator={false}
+      style={ds.scroll} contentContainerStyle={ds.content}>
+      {items.map(item => {
+        if (item.type === 'month') {
+          return (
+            <View key={item.key} style={ds.monthSep}>
+              <Text style={ds.monthTxt}>{item.label}</Text>
+            </View>
+          )
+        }
+        const day = item.date
         const sol      = getSolunarForDate(day)
         const selected = isSameDay(day, selectedDate)
         const todayDay = isSameDay(day, today)
         return (
-          <TouchableOpacity key={i}
+          <TouchableOpacity key={item.key}
             style={[ds.pill, selected && ds.pillSelected, todayDay && !selected && ds.pillToday]}
             onPress={() => onSelect(day)}
           >
@@ -225,30 +271,16 @@ function DayStrip({ selectedDate, onSelect }) {
   )
 }
 
-const ds = StyleSheet.create({
-  scroll:       { backgroundColor: Colors.brackishWater },
-  content:      { paddingHorizontal: 12, paddingVertical: 10, gap: 6 },
-  pill:         { width: 58, alignItems: 'center', paddingVertical: 8, borderRadius: Radius.md, borderWidth: 0.5, borderColor: 'rgba(255,255,255,0.2)', gap: 2 },
-  pillSelected: { backgroundColor: 'rgba(255,255,255,0.25)', borderColor: '#fff' },
-  pillToday:    { borderColor: Colors.doubloonGold },
-  dayName:      { fontSize: 9, color: 'rgba(255,255,255,0.75)', fontWeight: '600', letterSpacing: 0.3 },
-  dayNum:       { fontSize: Typography.md, fontWeight: '700', color: '#fff' },
-  moon:         { fontSize: 12 },
-  tideVal:      { fontSize: 9, color: 'rgba(255,255,255,0.7)' },
-  dot:          { width: 6, height: 6, borderRadius: 3 },
-  textSel:      { color: '#fff' },
-})
-
 // ── Screen ────────────────────────────────────────────────────────────────────
 export default function TidesScreen({ navigation }) {
+  const { Colors }  = useTheme()
   const insets = useSafeAreaInsets()
   const { tideStation, setTideStation } = useDataLocation()
-  const [selectedDate,     setSelectedDate]     = useState(new Date())
-  const [hourly,           setHourly]           = useState([])
-  const [hiLo,             setHiLo]             = useState([])
-  const [loading,          setLoading]          = useState(true)
-  const [refreshing,       setRefreshing]       = useState(false)
-  const [showCalendar,     setShowCalendar]     = useState(false)
+  const [selectedDate,      setSelectedDate]      = useState(new Date())
+  const [hourly,            setHourly]            = useState([])
+  const [hiLo,              setHiLo]              = useState([])
+  const [loading,           setLoading]           = useState(true)
+  const [refreshing,        setRefreshing]        = useState(false)
   const [showStationPicker, setShowStationPicker] = useState(false)
 
   const loadData = useCallback(async (date) => {
@@ -284,37 +316,78 @@ export default function TidesScreen({ navigation }) {
   const nextHighs = hiLo.filter(t => t.type === 'H')
   const nextLows  = hiLo.filter(t => t.type === 'L')
 
+  const s = useMemo(() => StyleSheet.create({
+    container: { flex: 1, backgroundColor: Colors.screenBg },
+
+    topbar:        { backgroundColor: Colors.topbarBg, flexDirection: 'row', alignItems: 'center', paddingHorizontal: Spacing.md, paddingBottom: 12 },
+    topbarBack:    { padding: 4, marginRight: 4 },
+    topbarBackTxt: { fontSize: 26, color: '#fff', lineHeight: 30 },
+    topbarTitle:   { flex: 1, fontFamily: 'Georgia', fontSize: Typography.lg, fontWeight: '700', color: '#fff', letterSpacing: 0.5 },
+
+    content: { padding: Spacing.lg, gap: Spacing.md, paddingBottom: 80 },
+
+    heroCard:     { backgroundColor: Colors.deepSea, borderRadius: Radius.lg, padding: 12, flexDirection: 'row', alignItems: 'center' },
+    heroLeft:     { flex: 1 },
+    heroLabel:    { fontSize: Typography.xs, color: Colors.textSecondary, marginBottom: 2 },
+    heroVal:      { fontSize: 28, fontWeight: '700', color: Colors.textPrimary, fontFamily: 'Georgia' },
+    heroDir:      { fontSize: Typography.sm, color: Colors.brackishWater, marginTop: 2 },
+    heroRight:    { gap: 8, alignItems: 'flex-end' },
+    heroBox:      { backgroundColor: Colors.inputBg, borderRadius: Radius.md, paddingHorizontal: 10, paddingVertical: 7, alignItems: 'center', minWidth: 68 },
+    heroBoxLabel: { fontSize: 9, color: Colors.textSecondary, marginBottom: 2, letterSpacing: 0.3 },
+    heroBoxVal:   { fontSize: Typography.base, fontWeight: '700', color: Colors.textPrimary },
+    heroBoxTime:  { fontSize: Typography.xs, color: Colors.textMuted, marginTop: 1 },
+
+    card:       { backgroundColor: Colors.cardBg, borderRadius: Radius.lg, borderWidth: 0.5, borderColor: Colors.border, padding: Spacing.lg },
+    cardTitle:  { fontSize: Typography.base, fontWeight: '600', color: Colors.textPrimary, marginBottom: 2 },
+    cardSub:    { fontSize: Typography.xs, color: Colors.textMuted, marginBottom: 14 },
+
+    hiLoGrid:  { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: Spacing.md },
+    hiLoCard:  { flex: 1, minWidth: '45%', borderRadius: Radius.md, padding: 12, alignItems: 'center', gap: 4 },
+    hiLoHigh:  { backgroundColor: `${Colors.brackishWater}1A`, borderWidth: 0.5, borderColor: Colors.brackishWater },
+    hiLoLow:   { backgroundColor: `${Colors.doubloonGold}14`, borderWidth: 0.5, borderColor: Colors.doubloonGold },
+    hiLoIcon:  { fontSize: 18 },
+    hiLoType:  { fontSize: Typography.xs, color: Colors.textSecondary },
+    hiLoVal:   { fontSize: Typography.xl, fontWeight: '700', color: Colors.textPrimary },
+    hiLoTime:  { fontSize: Typography.sm, color: Colors.textSecondary },
+
+    infoRow:   { flexDirection: 'row', gap: 8 },
+    infoCard:  { flex: 1, backgroundColor: Colors.cardBg, borderRadius: Radius.md, borderWidth: 0.5, borderColor: Colors.border, padding: 12, alignItems: 'center', gap: 4 },
+    infoIcon:  { fontSize: 18 },
+    infoLabel: { fontSize: Typography.xs, color: Colors.textSecondary, textAlign: 'center' },
+    infoVal:   { fontSize: Typography.sm, fontWeight: '500', color: Colors.textPrimary, textAlign: 'center' },
+
+    tipRow:      { flexDirection: 'row', gap: 10, marginBottom: 12, alignItems: 'flex-start' },
+    tipBadge:    { backgroundColor: `${Colors.brackishWater}1F`, borderRadius: Radius.sm, paddingHorizontal: 8, paddingVertical: 3, borderWidth: 0.5, borderColor: Colors.brackishWater, minWidth: 72, alignItems: 'center' },
+    tipBadgeTxt: { fontSize: Typography.xs, color: Colors.brackishWater, fontWeight: '600' },
+    tipTxt:      { flex: 1, fontSize: Typography.sm, color: Colors.textSecondary, lineHeight: 20 },
+  }), [Colors])
+
   return (
     <View style={s.container}>
 
-      {/* ── CUSTOM TOPBAR ───────────────────────────── */}
+      {/* TOPBAR */}
       <View style={[s.topbar, { paddingTop: insets.top + 10 }]}>
         <TouchableOpacity onPress={() => navigation.navigate('Dashboard')} style={s.topbarBack}>
           <Text style={s.topbarBackTxt}>‹</Text>
         </TouchableOpacity>
         <Text style={s.topbarTitle}>Tides</Text>
-        <View style={s.topbarRight}>
-          <LocationChip
-            label={tideStation.name}
-            onPress={() => setShowStationPicker(true)}
-            color="#fff"
-            boneColor={Colors.brackishWater}
-          />
-          <TouchableOpacity onPress={() => setShowCalendar(true)} style={s.calBtn}>
-            <Text style={s.calBtnTxt}>📅</Text>
-          </TouchableOpacity>
-        </View>
+        <LocationChip
+          label={tideStation.name}
+          onPress={() => setShowStationPicker(true)}
+          color="#fff"
+          boneColor={Colors.topbarBg}
+        />
       </View>
 
-      {/* ── DAY STRIP ───────────────────────────────── */}
+      {/* DAY STRIP */}
       <DayStrip selectedDate={selectedDate} onSelect={setSelectedDate}/>
 
-      {/* ── SCROLLABLE CONTENT ──────────────────────── */}
+      {/* SCROLLABLE CONTENT */}
       <ScrollView
         contentContainerStyle={s.content}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.brackishWater}/>}
       >
-        {/* Compact hero */}
+        {/* Hero */}
         <View style={s.heroCard}>
           <View style={s.heroLeft}>
             <Text style={s.heroLabel}>Current tide</Text>
@@ -338,7 +411,7 @@ export default function TidesScreen({ navigation }) {
         {/* Chart */}
         <View style={s.card}>
           <Text style={s.cardTitle}>Today's tide chart</Text>
-          <Text style={s.cardSub}>Slide your finger to explore · {tideStation.name}</Text>
+          <Text style={s.cardSub}>24-hour tide chart · {tideStation.name}</Text>
           {loading
             ? <View style={{ height: CHART_H, alignItems: 'center', justifyContent: 'center' }}>
                 <ActivityIndicator color={Colors.brackishWater}/>
@@ -397,69 +470,14 @@ export default function TidesScreen({ navigation }) {
         </View>
       </ScrollView>
 
-      {/* Calendar modal */}
-      {showCalendar && (
-        <Modal visible animationType="slide" presentationStyle="pageSheet">
-          <TidesCalendar onClose={() => setShowCalendar(false)}/>
-        </Modal>
-      )}
-
-      {/* Tide station picker */}
       <TideStationPickerModal
         visible={showStationPicker}
         onClose={() => setShowStationPicker(false)}
         onSelect={(id, name) => setTideStation(id, name)}
         currentStationId={tideStation.id}
       />
+
+      <ForecastBubble navigation={navigation} activeRoute="Tides"/>
     </View>
   )
 }
-
-const s = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.saltWhite },
-
-  topbar:       { backgroundColor: Colors.brackishWater, flexDirection: 'row', alignItems: 'center', paddingHorizontal: Spacing.md, paddingBottom: 12 },
-  topbarBack:   { padding: 4, marginRight: 4 },
-  topbarBackTxt:{ fontSize: 26, color: '#fff', lineHeight: 30 },
-  topbarTitle:  { flex: 1, fontFamily: 'Georgia', fontSize: Typography.lg, fontWeight: '700', color: '#fff', letterSpacing: 0.5 },
-  topbarRight:  { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  calBtn:       { padding: 4 },
-  calBtnTxt:    { fontSize: 18 },
-
-  content: { padding: Spacing.lg, gap: Spacing.md, paddingBottom: 32 },
-
-  heroCard:     { backgroundColor: Colors.deepSea, borderRadius: Radius.lg, padding: 12, flexDirection: 'row', alignItems: 'center' },
-  heroLeft:     { flex: 1 },
-  heroLabel:    { fontSize: Typography.xs, color: 'rgba(255,255,255,0.6)', marginBottom: 2 },
-  heroVal:      { fontSize: 28, fontWeight: '700', color: Colors.saltWhite, fontFamily: 'Georgia' },
-  heroDir:      { fontSize: Typography.sm, color: Colors.brackishWater, marginTop: 2 },
-  heroRight:    { gap: 8, alignItems: 'flex-end' },
-  heroBox:      { backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: Radius.md, paddingHorizontal: 10, paddingVertical: 7, alignItems: 'center', minWidth: 68 },
-  heroBoxLabel: { fontSize: 9, color: 'rgba(255,255,255,0.5)', marginBottom: 2, letterSpacing: 0.3 },
-  heroBoxVal:   { fontSize: Typography.base, fontWeight: '700', color: '#fff' },
-  heroBoxTime:  { fontSize: Typography.xs, color: 'rgba(255,255,255,0.5)', marginTop: 1 },
-
-  card:       { backgroundColor: Colors.cardBg, borderRadius: Radius.lg, borderWidth: 0.5, borderColor: Colors.border, padding: Spacing.lg },
-  cardTitle:  { fontSize: Typography.base, fontWeight: '600', color: Colors.textPrimary, marginBottom: 2 },
-  cardSub:    { fontSize: Typography.xs, color: Colors.textMuted, marginBottom: 14 },
-
-  hiLoGrid:  { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: Spacing.md },
-  hiLoCard:  { flex: 1, minWidth: '45%', borderRadius: Radius.md, padding: 12, alignItems: 'center', gap: 4 },
-  hiLoHigh:  { backgroundColor: 'rgba(74,143,168,0.1)', borderWidth: 0.5, borderColor: Colors.brackishWater },
-  hiLoLow:   { backgroundColor: 'rgba(196,154,42,0.08)', borderWidth: 0.5, borderColor: Colors.doubloonGold },
-  hiLoIcon:  { fontSize: 18 },
-  hiLoType:  { fontSize: Typography.xs, color: Colors.textSecondary },
-  hiLoVal:   { fontSize: Typography.xl, fontWeight: '700', color: Colors.textPrimary },
-  hiLoTime:  { fontSize: Typography.sm, color: Colors.textSecondary },
-
-  infoRow:   { flexDirection: 'row', gap: 8 },
-  infoCard:  { flex: 1, backgroundColor: Colors.cardBg, borderRadius: Radius.md, borderWidth: 0.5, borderColor: Colors.border, padding: 12, alignItems: 'center', gap: 4 },
-  infoIcon:  { fontSize: 18 },
-  infoLabel: { fontSize: Typography.xs, color: Colors.textSecondary, textAlign: 'center' },
-  infoVal:   { fontSize: Typography.sm, fontWeight: '500', color: Colors.textPrimary, textAlign: 'center' },
-
-  tipRow:      { flexDirection: 'row', gap: 10, marginBottom: 12, alignItems: 'flex-start' },
-  tipBadge:    { backgroundColor: 'rgba(74,143,168,0.12)', borderRadius: Radius.sm, paddingHorizontal: 8, paddingVertical: 3, borderWidth: 0.5, borderColor: Colors.brackishWater, minWidth: 72, alignItems: 'center' },
-  tipBadgeTxt: { fontSize: Typography.xs, color: Colors.brackishWater, fontWeight: '600' },
-  tipTxt:      { flex: 1, fontSize: Typography.sm, color: Colors.textSecondary, lineHeight: 20 },
-})

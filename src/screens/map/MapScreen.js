@@ -1,12 +1,13 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react'
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import {
   View, Text, StyleSheet, TouchableOpacity,
   ScrollView, ActivityIndicator, Alert,
   Dimensions, Animated,
 } from 'react-native'
-import MapView, { Marker, Circle, PROVIDER_GOOGLE } from 'react-native-maps'
+import MapView, { Marker, Circle, UrlTile, PROVIDER_GOOGLE } from 'react-native-maps'
 import * as Location from 'expo-location'
-import { Colors, Typography, Spacing, Radius } from '../../constants/theme'
+import { Typography, Spacing, Radius } from '../../constants/theme'
+import { useTheme } from '../../hooks/useTheme'
 import { fetchNoaaStations } from '../../utils/tides'
 import { useApp } from '../../context/AppContext'
 
@@ -30,10 +31,10 @@ const ACTIVITY_COLORS = {
 }
 
 const LAYERS = [
-  { id: 'fish',    label: 'Fish activity',  icon: '🐟' },
-  { id: 'tides',   label: 'Tide stations',  icon: '🌊' },
-  { id: 'temp',    label: 'Water temp',     icon: '🌡' },
-  { id: 'ramps',   label: 'Boat ramps',     icon: '⚓' },
+  { id: 'fish',  label: 'Fish activity', icon: '🐟' },
+  { id: 'tides', label: 'Tide stations', icon: '🌊' },
+  { id: 'radar', label: 'Live radar',    icon: '🌧' },
+  { id: 'ramps', label: 'Boat ramps',    icon: '⚓' },
 ]
 
 const DEFAULT_REGION = {
@@ -42,6 +43,18 @@ const DEFAULT_REGION = {
   latitudeDelta:  0.5,
   longitudeDelta: 0.5,
 }
+
+const mapStyle = [
+  { elementType: 'geometry', stylers: [{ color: '#0d2137' }] },
+  { elementType: 'labels.text.fill', stylers: [{ color: '#8ABEDC' }] },
+  { elementType: 'labels.text.stroke', stylers: [{ color: '#0d2137' }] },
+  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#1A3A52' }] },
+  { featureType: 'water', elementType: 'labels.text.fill', stylers: [{ color: '#4A8FA8' }] },
+  { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#1A3A52' }] },
+  { featureType: 'poi', stylers: [{ visibility: 'off' }] },
+  { featureType: 'transit', stylers: [{ visibility: 'off' }] },
+  { featureType: 'administrative', elementType: 'geometry', stylers: [{ color: '#4A8FA8' }] },
+]
 
 function haversine(lat1, lng1, lat2, lng2) {
   const R    = 3958.8
@@ -52,7 +65,12 @@ function haversine(lat1, lng1, lat2, lng2) {
   return R * 2 * Math.asin(Math.sqrt(a))
 }
 
+function radarFrameTime(ts) {
+  return new Date(ts * 1000).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
+}
+
 export default function MapScreen({ navigation }) {
+  const { Colors } = useTheme()
   const { homePort, setHomePort, activeStation, setActiveStation } = useApp()
   const mapRef                             = useRef(null)
   const [region,          setRegion]       = useState(DEFAULT_REGION)
@@ -62,15 +80,83 @@ export default function MapScreen({ navigation }) {
   const [mapType,         setMapType]      = useState('satellite')
   const [locLoading,      setLocLoading]   = useState(false)
   const [showLayers,      setShowLayers]   = useState(false)
-  const [noaaStations,    setNoaaStations] = useState([])
-  const [stationsLoaded,  setStationsLoaded] = useState(false)
+  const [noaaStations,    setNoaaStations]    = useState([])
+  const [stationsLoaded,  setStationsLoaded]  = useState(false)
   const [stationsLoading, setStationsLoading] = useState(false)
   const [selectedStation, setSelectedStationCard] = useState(null)
-  const slideAnim                          = useRef(new Animated.Value(0)).current
+  const [radarFrames,    setRadarFrames]    = useState([])
+  const [radarFrameIdx,  setRadarFrameIdx]  = useState(0)
+  const [radarPlaying,   setRadarPlaying]   = useState(false)
+  const radarIntervalRef                    = useRef(null)
+  const slideAnim                           = useRef(new Animated.Value(0)).current
+
+  const styles = useMemo(() => StyleSheet.create({
+    container: { flex: 1 },
+    map:       { flex: 1 },
+
+    topBar:     { position: 'absolute', top: 12, left: 12, right: 12, flexDirection: 'row', alignItems: 'center', gap: 8 },
+    topBtn:     { backgroundColor: 'rgba(13,33,55,0.92)', borderRadius: Radius.md, paddingHorizontal: 12, paddingVertical: 7, borderWidth: 0.5, borderColor: 'rgba(255,255,255,0.15)' },
+    topBtnText: { fontSize: Typography.sm, color: '#F5F0E8', fontWeight: '500' },
+
+    layerPanel:  { position: 'absolute', top: 52, right: 12, backgroundColor: 'rgba(13,33,55,0.97)', borderRadius: Radius.lg, padding: 8, borderWidth: 0.5, borderColor: 'rgba(255,255,255,0.08)', gap: 4 },
+    layerBtn:    { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 10, paddingVertical: 7, borderRadius: Radius.md, borderWidth: 0.5, borderColor: 'transparent' },
+    layerBtnOn:  { backgroundColor: `${Colors.brackishWater}1F`, borderColor: Colors.brackishWater },
+    layerIcon:   { fontSize: 14 },
+    layerLabel:  { fontSize: Typography.sm, color: 'rgba(255,255,255,0.45)' },
+    layerLabelOn:{ color: Colors.brackishWater, fontWeight: '500' },
+    layerHint:   { fontSize: 10, color: 'rgba(255,255,255,0.3)', textAlign: 'center', paddingHorizontal: 4, paddingTop: 4, borderTopWidth: 0.5, borderTopColor: 'rgba(255,255,255,0.08)', marginTop: 4 },
+
+    locBtn:     { position: 'absolute', right: 12, bottom: 220, width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(13,33,55,0.92)', borderWidth: 0.5, borderColor: 'rgba(255,255,255,0.08)', alignItems: 'center', justifyContent: 'center' },
+    locBtnText: { fontSize: 22, color: Colors.brackishWater },
+
+    legend:     { position: 'absolute', left: 12, bottom: 220, backgroundColor: 'rgba(13,33,55,0.82)', borderRadius: Radius.md, padding: 10, gap: 5 },
+    legendRow:  { flexDirection: 'row', alignItems: 'center', gap: 6 },
+    legendDot:  { width: 8, height: 8, borderRadius: 4 },
+    legendText: { fontSize: Typography.xs, color: '#F5F0E8' },
+
+    markerDot:   { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#fff' },
+    markerScore: { fontSize: Typography.xs, color: '#fff', fontWeight: '700' },
+
+    stationMarker:       { width: 26, height: 26, borderRadius: 13, backgroundColor: Colors.brackishWater, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: '#fff' },
+    stationMarkerActive: { backgroundColor: Colors.doubloonGold, borderColor: '#fff', borderWidth: 2 },
+    stationMarkerTxt:    { fontSize: 11, color: '#fff', fontWeight: '700' },
+
+    spotCard:    { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: Colors.topbarBg, borderTopLeftRadius: Radius.xl, borderTopRightRadius: Radius.xl, padding: Spacing.lg, paddingBottom: 32, borderTopWidth: 0.5, borderTopColor: 'rgba(255,255,255,0.1)' },
+    spotCardHd:  { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 10 },
+    spotName:    { fontSize: Typography.md, fontWeight: '700', color: '#fff' },
+    spotMeta:    { fontSize: Typography.xs, color: 'rgba(255,255,255,0.45)', marginTop: 2 },
+    scoreBadge:  { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', marginLeft: 8 },
+    scoreText:   { fontSize: Typography.sm, color: '#fff', fontWeight: '700' },
+    closeBtn:    { padding: 4, marginLeft: 8 },
+    closeBtnText:{ fontSize: 16, color: 'rgba(255,255,255,0.45)' },
+    speciesRow:  { flexDirection: 'row', flexWrap: 'wrap', gap: 5, marginBottom: 10 },
+    chip:        { backgroundColor: `${Colors.brackishWater}33`, borderRadius: Radius.full, paddingHorizontal: 10, paddingVertical: 3 },
+    chipText:    { fontSize: Typography.xs, color: Colors.brackishWater, fontWeight: '500' },
+    spotTip:     { fontSize: Typography.sm, color: 'rgba(255,255,255,0.55)', lineHeight: 20, marginBottom: 14 },
+    saveBtn:     { backgroundColor: Colors.brackishWater, borderRadius: Radius.md, paddingVertical: 12, alignItems: 'center' },
+    saveBtnText: { fontSize: Typography.base, color: '#fff', fontWeight: '500' },
+    activeBadge: { backgroundColor: `${Colors.brackishWater}1A`, borderRadius: Radius.sm, paddingHorizontal: 10, paddingVertical: 5, marginBottom: 10, alignSelf: 'flex-start', borderWidth: 0.5, borderColor: Colors.brackishWater },
+    activeBadgeTxt:{ fontSize: Typography.xs, color: Colors.brackishWater, fontWeight: '600' },
+
+    radarBar:       { position: 'absolute', bottom: 155, left: 12, right: 12, backgroundColor: 'rgba(13,33,55,0.95)', borderRadius: Radius.lg, paddingHorizontal: 12, paddingVertical: 10, flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 0.5, borderColor: 'rgba(255,255,255,0.08)' },
+    radarPlayBtn:   { width: 32, height: 32, borderRadius: 16, backgroundColor: Colors.brackishWater, alignItems: 'center', justifyContent: 'center' },
+    radarPlayIcon:  { fontSize: 13, color: '#fff' },
+    radarTimeline:  { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 2 },
+    radarTick:      { flex: 1, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.18)' },
+    radarTickActive:{ backgroundColor: Colors.brackishWater, height: 7, borderRadius: 3.5 },
+    radarTime:      { fontSize: Typography.xs, color: 'rgba(255,255,255,0.45)', width: 62, textAlign: 'right' },
+
+    nearbyStrip: { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: 'rgba(13,33,55,0.97)', borderTopLeftRadius: Radius.xl, borderTopRightRadius: Radius.xl, paddingTop: 14, paddingBottom: 28, borderTopWidth: 0.5, borderTopColor: 'rgba(255,255,255,0.08)' },
+    nearbyTitle: { fontSize: Typography.sm, fontWeight: '500', color: 'rgba(255,255,255,0.45)', paddingHorizontal: 16, marginBottom: 10 },
+    nearbyCard:  { width: 140, marginLeft: 12, backgroundColor: '#1A3A52', borderRadius: Radius.md, padding: 10, borderWidth: 0.5, borderColor: 'rgba(255,255,255,0.08)' },
+    nearbyDot:   { width: 8, height: 8, borderRadius: 4, marginBottom: 5 },
+    nearbyName:  { fontSize: Typography.sm, fontWeight: '500', color: '#fff', marginBottom: 2 },
+    nearbyMeta:  { fontSize: Typography.xs, color: 'rgba(255,255,255,0.45)', marginBottom: 3 },
+    nearbyActivity:{ fontSize: Typography.xs, color: 'rgba(255,255,255,0.45)' },
+  }), [Colors])
 
   useEffect(() => { getLocation() }, [])
 
-  // Load NOAA stations when tide layer toggled on
   useEffect(() => {
     if (activeLayers.includes('tides') && !stationsLoaded && !stationsLoading) {
       setStationsLoading(true)
@@ -80,6 +166,38 @@ export default function MapScreen({ navigation }) {
         .finally(() => setStationsLoading(false))
     }
   }, [activeLayers, stationsLoaded, stationsLoading])
+
+  useEffect(() => {
+    if (activeLayers.includes('radar') && radarFrames.length === 0) {
+      fetch('https://api.rainviewer.com/public/weather-maps.json')
+        .then(r => r.json())
+        .then(data => {
+          const past = data.radar?.past ?? []
+          const host = data.host ?? 'https://tilecache.rainviewer.com'
+          const frames = past.map(f => ({ url: `${host}${f.path}`, time: f.time }))
+          if (frames.length) {
+            setRadarFrames(frames)
+            setRadarFrameIdx(frames.length - 1)
+            setRadarPlaying(true)
+          }
+        })
+        .catch(() => {})
+    }
+  }, [activeLayers, radarFrames.length])
+
+  const radarPlayingRef = useRef(true)
+  const radarFramesRef  = useRef([])
+  radarPlayingRef.current = radarPlaying
+  radarFramesRef.current  = radarFrames
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (radarPlayingRef.current && radarFramesRef.current.length > 1) {
+        setRadarFrameIdx(i => (i + 1) % radarFramesRef.current.length)
+      }
+    }, 600)
+    return () => clearInterval(id)
+  }, [])
 
   const getLocation = async () => {
     setLocLoading(true)
@@ -104,9 +222,15 @@ export default function MapScreen({ navigation }) {
   }
 
   const toggleLayer = (id) => {
-    setActiveLayers(prev =>
-      prev.includes(id) ? prev.filter(l => l !== id) : [...prev, id]
-    )
+    setActiveLayers(prev => {
+      const next = prev.includes(id) ? prev.filter(l => l !== id) : [...prev, id]
+      if (id === 'radar' && !next.includes('radar')) {
+        setRadarFrames([])
+        setRadarFrameIdx(0)
+        setRadarPlaying(false)
+      }
+      return next
+    })
   }
 
   const toggleLayerPanel = () => {
@@ -166,7 +290,6 @@ export default function MapScreen({ navigation }) {
     }
   }, [setHomePort])
 
-  // Filter NOAA stations to visible region (max 40 markers)
   const visibleStations = activeLayers.includes('tides')
     ? noaaStations
         .filter(st =>
@@ -197,6 +320,8 @@ export default function MapScreen({ navigation }) {
         showsCompass={false}
         customMapStyle={mapStyle}
         googleMapsApiKey={GOOGLE_MAPS_KEY}
+        minZoomLevel={3}
+        maxZoomLevel={18}
         onPress={() => { setSelectedSpot(null); setSelectedStationCard(null) }}
         onLongPress={(e) => handleLongPress(e.nativeEvent.coordinate)}
         onRegionChangeComplete={setRegion}
@@ -209,7 +334,7 @@ export default function MapScreen({ navigation }) {
               <Circle center={{ latitude: spot.lat, longitude: spot.lng }} radius={2200}
                 fillColor={colors.fill} strokeColor={colors.stroke} strokeWidth={1.5}/>
               <Marker coordinate={{ latitude: spot.lat, longitude: spot.lng }}
-                onPress={() => selectSpot(spot)} anchor={{ x: 0.5, y: 0.5 }}>
+                onPress={() => { try { selectSpot(spot) } catch(_){} }} anchor={{ x: 0.5, y: 0.5 }}>
                 <View style={[styles.markerDot, { backgroundColor: colors.dot }]}>
                   <Text style={styles.markerScore}>{spot.score}</Text>
                 </View>
@@ -224,7 +349,7 @@ export default function MapScreen({ navigation }) {
           return (
             <Marker key={st.id}
               coordinate={{ latitude: st.lat, longitude: st.lng }}
-              onPress={() => selectNoaaStation(st)}
+              onPress={() => { try { selectNoaaStation(st) } catch(_){} }}
               anchor={{ x: 0.5, y: 0.5 }}
             >
               <View style={[styles.stationMarker, isActive && styles.stationMarkerActive]}>
@@ -233,6 +358,20 @@ export default function MapScreen({ navigation }) {
             </Marker>
           )
         })}
+
+        {/* Live radar tile overlay */}
+        {activeLayers.includes('radar') && radarFrames.map((frame, i) => (
+          <UrlTile
+            key={i}
+            urlTemplate={`${frame.url}/256/{z}/{x}/{y}/2/1_1.png`}
+            zIndex={2}
+            opacity={i === radarFrameIdx ? 0.65 : 0}
+            tileSize={256}
+            minimumZ={1}
+            maximumZ={12}
+            maximumNativeZ={8}
+          />
+        ))}
       </MapView>
 
       {/* TOP CONTROLS */}
@@ -259,6 +398,7 @@ export default function MapScreen({ navigation }) {
                 <Text style={styles.layerIcon}>{layer.icon}</Text>
                 <Text style={[styles.layerLabel, on && styles.layerLabelOn]}>{layer.label}</Text>
                 {layer.id === 'tides' && stationsLoading && <ActivityIndicator size="small" color={Colors.brackishWater} style={{ marginLeft: 4 }}/>}
+                {layer.id === 'radar' && activeLayers.includes('radar') && radarFrames.length === 0 && <ActivityIndicator size="small" color={Colors.brackishWater} style={{ marginLeft: 4 }}/>}
               </TouchableOpacity>
             )
           })}
@@ -338,7 +478,7 @@ export default function MapScreen({ navigation }) {
             </View>
           )}
           <TouchableOpacity
-            style={[styles.saveBtn, { backgroundColor: activeStation.id === selectedStation.id ? Colors.textSecondary : Colors.brackishWater }]}
+            style={[styles.saveBtn, { backgroundColor: activeStation.id === selectedStation.id ? 'rgba(255,255,255,0.2)' : Colors.brackishWater }]}
             onPress={useThisStation}
             disabled={activeStation.id === selectedStation.id}
           >
@@ -346,6 +486,25 @@ export default function MapScreen({ navigation }) {
               {activeStation.id === selectedStation.id ? '✓ Already active' : '🌊 Use this station for tide data'}
             </Text>
           </TouchableOpacity>
+        </View>
+      )}
+
+      {/* RADAR TIMELINE */}
+      {activeLayers.includes('radar') && radarFrames.length > 0 && !selectedSpot && !selectedStation && (
+        <View style={styles.radarBar}>
+          <TouchableOpacity onPress={() => setRadarPlaying(p => !p)} style={styles.radarPlayBtn}>
+            <Text style={styles.radarPlayIcon}>{radarPlaying ? '⏸' : '▶'}</Text>
+          </TouchableOpacity>
+          <View style={styles.radarTimeline}>
+            {radarFrames.map((frame, i) => (
+              <TouchableOpacity
+                key={i}
+                onPress={() => { setRadarFrameIdx(i); setRadarPlaying(false) }}
+                style={[styles.radarTick, i === radarFrameIdx && styles.radarTickActive]}
+              />
+            ))}
+          </View>
+          <Text style={styles.radarTime}>{radarFrameTime(radarFrames[radarFrameIdx].time)}</Text>
         </View>
       )}
 
@@ -371,72 +530,3 @@ export default function MapScreen({ navigation }) {
     </View>
   )
 }
-
-const mapStyle = [
-  { elementType: 'geometry', stylers: [{ color: '#0d2137' }] },
-  { elementType: 'labels.text.fill', stylers: [{ color: '#8ABEDC' }] },
-  { elementType: 'labels.text.stroke', stylers: [{ color: '#0d2137' }] },
-  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#1A3A52' }] },
-  { featureType: 'water', elementType: 'labels.text.fill', stylers: [{ color: '#4A8FA8' }] },
-  { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#1A3A52' }] },
-  { featureType: 'poi', stylers: [{ visibility: 'off' }] },
-  { featureType: 'transit', stylers: [{ visibility: 'off' }] },
-  { featureType: 'administrative', elementType: 'geometry', stylers: [{ color: '#4A8FA8' }] },
-]
-
-const styles = StyleSheet.create({
-  container: { flex: 1 },
-  map:       { flex: 1 },
-
-  topBar:     { position: 'absolute', top: 12, left: 12, right: 12, flexDirection: 'row', alignItems: 'center', gap: 8 },
-  topBtn:     { backgroundColor: 'rgba(245,240,232,0.95)', borderRadius: Radius.md, paddingHorizontal: 12, paddingVertical: 7, borderWidth: 0.5, borderColor: 'rgba(196,154,42,0.4)' },
-  topBtnText: { fontSize: Typography.sm, color: Colors.deepSea, fontWeight: '500' },
-
-  layerPanel: { position: 'absolute', top: 52, right: 12, backgroundColor: 'rgba(245,240,232,0.97)', borderRadius: Radius.lg, padding: 8, borderWidth: 0.5, borderColor: Colors.border, gap: 4 },
-  layerBtn:   { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 10, paddingVertical: 7, borderRadius: Radius.md, borderWidth: 0.5, borderColor: 'transparent' },
-  layerBtnOn: { backgroundColor: 'rgba(74,143,168,0.12)', borderColor: Colors.brackishWater },
-  layerIcon:  { fontSize: 14 },
-  layerLabel: { fontSize: Typography.sm, color: Colors.textSecondary },
-  layerLabelOn:{ color: Colors.brackishWater, fontWeight: '500' },
-  layerHint:  { fontSize: 10, color: Colors.textMuted, textAlign: 'center', paddingHorizontal: 4, paddingTop: 4, borderTopWidth: 0.5, borderTopColor: Colors.border, marginTop: 4 },
-
-  locBtn:     { position: 'absolute', right: 12, bottom: 220, width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(245,240,232,0.97)', borderWidth: 0.5, borderColor: Colors.border, alignItems: 'center', justifyContent: 'center' },
-  locBtnText: { fontSize: 22, color: Colors.brackishWater },
-
-  legend:     { position: 'absolute', left: 12, bottom: 220, backgroundColor: 'rgba(13,33,55,0.82)', borderRadius: Radius.md, padding: 10, gap: 5 },
-  legendRow:  { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  legendDot:  { width: 8, height: 8, borderRadius: 4 },
-  legendText: { fontSize: Typography.xs, color: Colors.saltWhite },
-
-  markerDot:   { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#fff' },
-  markerScore: { fontSize: Typography.xs, color: '#fff', fontWeight: '700' },
-
-  stationMarker:       { width: 26, height: 26, borderRadius: 13, backgroundColor: Colors.brackishWater, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: '#fff' },
-  stationMarkerActive: { backgroundColor: Colors.doubloonGold, borderColor: '#fff', borderWidth: 2 },
-  stationMarkerTxt:    { fontSize: 11, color: '#fff', fontWeight: '700' },
-
-  spotCard:    { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: Colors.saltWhite, borderTopLeftRadius: Radius.xl, borderTopRightRadius: Radius.xl, padding: Spacing.lg, paddingBottom: 32, borderTopWidth: 0.5, borderTopColor: Colors.border },
-  spotCardHd:  { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 10 },
-  spotName:    { fontSize: Typography.md, fontWeight: '700', color: Colors.textPrimary },
-  spotMeta:    { fontSize: Typography.xs, color: Colors.textSecondary, marginTop: 2 },
-  scoreBadge:  { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', marginLeft: 8 },
-  scoreText:   { fontSize: Typography.sm, color: '#fff', fontWeight: '700' },
-  closeBtn:    { padding: 4, marginLeft: 8 },
-  closeBtnText:{ fontSize: 16, color: Colors.textSecondary },
-  speciesRow:  { flexDirection: 'row', flexWrap: 'wrap', gap: 5, marginBottom: 10 },
-  chip:        { backgroundColor: '#D0E4EE', borderRadius: Radius.full, paddingHorizontal: 10, paddingVertical: 3 },
-  chipText:    { fontSize: Typography.xs, color: Colors.deepSea, fontWeight: '500' },
-  spotTip:     { fontSize: Typography.sm, color: Colors.textSecondary, lineHeight: 20, marginBottom: 14 },
-  saveBtn:     { backgroundColor: Colors.brackishWater, borderRadius: Radius.md, paddingVertical: 12, alignItems: 'center' },
-  saveBtnText: { fontSize: Typography.base, color: Colors.saltWhite, fontWeight: '500' },
-  activeBadge: { backgroundColor: 'rgba(74,143,168,0.1)', borderRadius: Radius.sm, paddingHorizontal: 10, paddingVertical: 5, marginBottom: 10, alignSelf: 'flex-start', borderWidth: 0.5, borderColor: Colors.brackishWater },
-  activeBadgeTxt:{ fontSize: Typography.xs, color: Colors.brackishWater, fontWeight: '600' },
-
-  nearbyStrip: { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: 'rgba(245,240,232,0.97)', borderTopLeftRadius: Radius.xl, borderTopRightRadius: Radius.xl, paddingTop: 14, paddingBottom: 28, borderTopWidth: 0.5, borderTopColor: Colors.border },
-  nearbyTitle: { fontSize: Typography.sm, fontWeight: '500', color: Colors.textSecondary, paddingHorizontal: 16, marginBottom: 10 },
-  nearbyCard:  { width: 140, marginLeft: 12, backgroundColor: Colors.cardBg, borderRadius: Radius.md, padding: 10, borderWidth: 0.5, borderColor: Colors.border },
-  nearbyDot:   { width: 8, height: 8, borderRadius: 4, marginBottom: 5 },
-  nearbyName:  { fontSize: Typography.sm, fontWeight: '500', color: Colors.textPrimary, marginBottom: 2 },
-  nearbyMeta:  { fontSize: Typography.xs, color: Colors.textSecondary, marginBottom: 3 },
-  nearbyActivity:{ fontSize: Typography.xs, color: Colors.textSecondary },
-})

@@ -1,11 +1,12 @@
-import React, { useState } from 'react'
+import React, { useState, useMemo } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   TextInput, ActivityIndicator, Alert, Image,
 } from 'react-native'
 import * as ImagePicker from 'expo-image-picker'
 import * as Location from 'expo-location'
-import { Colors, Typography, Spacing, Radius } from '../../constants/theme'
+import { Typography, Spacing, Radius } from '../../constants/theme'
+import { useTheme } from '../../hooks/useTheme'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../hooks/useAuth'
 
@@ -30,22 +31,22 @@ const TIDE_OPTIONS = ['Incoming', 'Outgoing', 'High slack', 'Low slack']
 
 const RATING_LABELS = ['', 'Poor', 'Fair', 'Average', 'Good', 'Excellent']
 
-function SectionHeader({ title }) {
-  return <Text style={styles.sectionHd}>{title}</Text>
+function SectionHeader({ title, Colors, s }) {
+  return <Text style={s.sectionHd}>{title}</Text>
 }
 
-function MultiSelect({ options, selected, onToggle, columns = 2 }) {
+function MultiSelect({ options, selected, onToggle, columns = 2, Colors, s }) {
   return (
-    <View style={styles.multiGrid}>
+    <View style={s.multiGrid}>
       {options.map(opt => {
         const on = selected.includes(opt)
         return (
           <TouchableOpacity
             key={opt}
-            style={[styles.multiBtn, on && styles.multiBtnOn, { width: `${100 / columns - 2}%` }]}
+            style={[s.multiBtn, on && s.multiBtnOn, { width: `${100 / columns - 2}%` }]}
             onPress={() => onToggle(opt)}
           >
-            <Text style={[styles.multiTxt, on && styles.multiTxtOn]}>{opt}</Text>
+            <Text style={[s.multiTxt, on && s.multiTxtOn]}>{opt}</Text>
           </TouchableOpacity>
         )
       })}
@@ -53,19 +54,19 @@ function MultiSelect({ options, selected, onToggle, columns = 2 }) {
   )
 }
 
-function SingleSelect({ options, selected, onSelect }) {
+function SingleSelect({ options, selected, onSelect, s }) {
   return (
     <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-      <View style={styles.singleRow}>
+      <View style={s.singleRow}>
         {options.map(opt => {
           const on = selected === opt
           return (
             <TouchableOpacity
               key={opt}
-              style={[styles.singleChip, on && styles.singleChipOn]}
+              style={[s.singleChip, on && s.singleChipOn]}
               onPress={() => onSelect(opt)}
             >
-              <Text style={[styles.singleTxt, on && styles.singleTxtOn]}>{opt}</Text>
+              <Text style={[s.singleTxt, on && s.singleTxtOn]}>{opt}</Text>
             </TouchableOpacity>
           )
         })}
@@ -75,9 +76,9 @@ function SingleSelect({ options, selected, onSelect }) {
 }
 
 export default function SubmitReportScreen({ onClose, onSubmitted }) {
+  const { Colors } = useTheme()
   const { user } = useAuth()
 
-  // Form state
   const [species,       setSpecies]       = useState([])
   const [count,         setCount]         = useState('1')
   const [sizeInches,    setSizeInches]    = useState('')
@@ -91,13 +92,53 @@ export default function SubmitReportScreen({ onClose, onSubmitted }) {
   const [windDir,       setWindDir]       = useState('')
   const [tideDir,       setTideDir]       = useState('')
   const [photo,         setPhoto]         = useState(null)
-  const [useGPS,        setUseGPS]        = useState(true)
   const [gpsCoords,     setGpsCoords]     = useState(null)
   const [submitting,    setSubmitting]    = useState(false)
   const [gpsLoading,    setGpsLoading]    = useState(false)
 
-  const toggleSpecies = (s) => {
-    setSpecies(prev => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s])
+  const s = useMemo(() => StyleSheet.create({
+    container:    { flex: 1, backgroundColor: Colors.screenBg },
+    header:       { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: Spacing.md, paddingTop: 20, backgroundColor: Colors.topbarBg },
+    cancelBtn:    { padding: 4 },
+    cancelTxt:    { fontSize: Typography.base, color: 'rgba(255,255,255,0.8)' },
+    headerTitle:  { fontFamily: 'Georgia', fontSize: Typography.md, fontWeight: '700', color: '#fff' },
+    submitBtn:    { backgroundColor: Colors.doubloonGold, borderRadius: Radius.md, paddingHorizontal: 14, paddingVertical: 6 },
+    submitBtnDisabled: { opacity: 0.5 },
+    submitTxt:    { fontSize: Typography.base, fontWeight: '700', color: '#0D2137' },
+    content:      { padding: Spacing.lg, gap: Spacing.sm, paddingBottom: 40 },
+    sectionHd:    { fontSize: Typography.sm, fontWeight: '500', color: Colors.textSecondary, letterSpacing: 0.5, textTransform: 'uppercase', marginTop: Spacing.md, marginBottom: 6 },
+    multiGrid:    { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+    multiBtn:     { paddingVertical: 8, alignItems: 'center', borderRadius: Radius.md, borderWidth: 0.5, borderColor: Colors.border, backgroundColor: Colors.cardBg },
+    multiBtnOn:   { backgroundColor: Colors.brackishWater, borderColor: Colors.brackishWater },
+    multiTxt:     { fontSize: Typography.xs, color: Colors.textSecondary, fontWeight: '500' },
+    multiTxtOn:   { color: Colors.textOnDark },
+    singleRow:    { flexDirection: 'row', gap: 6, paddingBottom: 4 },
+    singleChip:   { paddingHorizontal: 12, paddingVertical: 6, borderRadius: Radius.full, borderWidth: 0.5, borderColor: Colors.border, backgroundColor: Colors.cardBg },
+    singleChipOn: { backgroundColor: Colors.doubloonGold, borderColor: Colors.doubloonGold },
+    singleTxt:    { fontSize: Typography.sm, color: Colors.textSecondary },
+    singleTxtOn:  { color: '#0D2137', fontWeight: '500' },
+    row:          { flexDirection: 'row', gap: Spacing.md },
+    halfField:    { flex: 1, gap: 5 },
+    fieldLabel:   { fontSize: Typography.xs, color: Colors.textSecondary, marginBottom: 4 },
+    input:        { backgroundColor: Colors.inputBg, borderWidth: 0.5, borderColor: Colors.borderMid, borderRadius: Radius.md, paddingHorizontal: Spacing.md, paddingVertical: 11, fontSize: Typography.base, color: Colors.textPrimary },
+    textarea:     { minHeight: 100, paddingTop: 11 },
+    gpsBtn:       { borderWidth: 0.5, borderColor: Colors.brackishWater, borderRadius: Radius.md, paddingVertical: 10, alignItems: 'center', marginTop: 8 },
+    gpsTxt:       { fontSize: Typography.sm, color: Colors.brackishWater, fontWeight: '500' },
+    ratingRow:    { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    ratingBtn:    { padding: 4 },
+    ratingStar:   { fontSize: 28, color: Colors.border },
+    ratingStarOn: { color: Colors.doubloonGold },
+    ratingLabel:  { fontSize: Typography.sm, color: Colors.textSecondary, marginLeft: 8 },
+    photoPreview: { width: '100%', height: 200, borderRadius: Radius.lg, marginBottom: 8 },
+    photoRow:     { flexDirection: 'row', gap: Spacing.md },
+    photoBtn:     { flex: 1, borderWidth: 0.5, borderColor: Colors.border, borderRadius: Radius.md, paddingVertical: 12, alignItems: 'center', backgroundColor: Colors.cardBg },
+    photoBtnTxt:  { fontSize: Typography.sm, color: Colors.textSecondary },
+    bigSubmit:    { backgroundColor: Colors.brackishWater, borderRadius: Radius.lg, paddingVertical: 16, alignItems: 'center', marginTop: Spacing.lg },
+    bigSubmitTxt: { fontFamily: 'Georgia', fontSize: Typography.md, fontWeight: '700', color: Colors.textOnDark, letterSpacing: 0.5 },
+  }), [Colors])
+
+  const toggleSpecies = (sp) => {
+    setSpecies(prev => prev.includes(sp) ? prev.filter(x => x !== sp) : [...prev, sp])
   }
 
   const getGPS = async () => {
@@ -130,9 +171,7 @@ export default function SubmitReportScreen({ onClose, onSubmitted }) {
       aspect: [4, 3],
       quality: 0.7,
     })
-    if (!result.canceled && result.assets[0]) {
-      setPhoto(result.assets[0])
-    }
+    if (!result.canceled && result.assets[0]) setPhoto(result.assets[0])
   }
 
   const takePhoto = async () => {
@@ -146,28 +185,21 @@ export default function SubmitReportScreen({ onClose, onSubmitted }) {
       aspect: [4, 3],
       quality: 0.7,
     })
-    if (!result.canceled && result.assets[0]) {
-      setPhoto(result.assets[0])
-    }
+    if (!result.canceled && result.assets[0]) setPhoto(result.assets[0])
   }
 
   const uploadPhoto = async (photoAsset) => {
-    try {
-      const fileName = `${user.id}/${Date.now()}.jpg`
-      const response = await fetch(photoAsset.uri)
-      const blob     = await response.blob()
-      const { data, error } = await supabase.storage
-        .from('catch-photos')
-        .upload(fileName, blob, { contentType: 'image/jpeg' })
-      if (error) throw error
-      const { data: urlData } = supabase.storage
-        .from('catch-photos')
-        .getPublicUrl(fileName)
-      return urlData.publicUrl
-    } catch (e) {
-      console.log('Photo upload error:', e)
-      return null
-    }
+    const fileName = `${user.id}/${Date.now()}.jpg`
+    const response = await fetch(photoAsset.uri)
+    const arrayBuffer = await response.arrayBuffer()
+    const { error } = await supabase.storage
+      .from('catch-photos')
+      .upload(fileName, arrayBuffer, { contentType: 'image/jpeg' })
+    if (error) throw error
+    const { data: urlData } = supabase.storage
+      .from('catch-photos')
+      .getPublicUrl(fileName)
+    return urlData.publicUrl
   }
 
   const handleSubmit = async () => {
@@ -183,11 +215,8 @@ export default function SubmitReportScreen({ onClose, onSubmitted }) {
     setSubmitting(true)
     try {
       let photoUrl = null
-      if (photo) {
-        photoUrl = await uploadPhoto(photo)
-      }
+      if (photo) photoUrl = await uploadPhoto(photo)
 
-      // Get user profile name
       const { data: profile } = await supabase
         .from('profiles')
         .select('full_name')
@@ -229,39 +258,35 @@ export default function SubmitReportScreen({ onClose, onSubmitted }) {
   }
 
   return (
-    <View style={styles.container}>
-
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={onClose} style={styles.cancelBtn}>
-          <Text style={styles.cancelTxt}>Cancel</Text>
+    <View style={s.container}>
+      <View style={s.header}>
+        <TouchableOpacity onPress={onClose} style={s.cancelBtn}>
+          <Text style={s.cancelTxt}>Cancel</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Catch Report</Text>
+        <Text style={s.headerTitle}>Catch Report</Text>
         <TouchableOpacity
           onPress={handleSubmit}
-          style={[styles.submitBtn, submitting && styles.submitBtnDisabled]}
+          style={[s.submitBtn, submitting && s.submitBtnDisabled]}
           disabled={submitting}
         >
           {submitting
-            ? <ActivityIndicator size="small" color={Colors.saltWhite}/>
-            : <Text style={styles.submitTxt}>Submit</Text>
+            ? <ActivityIndicator size="small" color="#0D2137"/>
+            : <Text style={s.submitTxt}>Submit</Text>
           }
         </TouchableOpacity>
       </View>
 
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView contentContainerStyle={s.content}>
 
-        {/* Species */}
-        <SectionHeader title="Species caught *"/>
-        <MultiSelect options={SPECIES_OPTIONS} selected={species} onToggle={toggleSpecies}/>
+        <Text style={s.sectionHd}>Species caught *</Text>
+        <MultiSelect options={SPECIES_OPTIONS} selected={species} onToggle={toggleSpecies} Colors={Colors} s={s}/>
 
-        {/* Count & Size */}
-        <SectionHeader title="Count & size"/>
-        <View style={styles.row}>
-          <View style={styles.halfField}>
-            <Text style={styles.fieldLabel}>Number of fish</Text>
+        <Text style={s.sectionHd}>Count & size</Text>
+        <View style={s.row}>
+          <View style={s.halfField}>
+            <Text style={s.fieldLabel}>Number of fish</Text>
             <TextInput
-              style={styles.input}
+              style={s.input}
               value={count}
               onChangeText={setCount}
               keyboardType="numeric"
@@ -269,10 +294,10 @@ export default function SubmitReportScreen({ onClose, onSubmitted }) {
               placeholderTextColor={Colors.textMuted}
             />
           </View>
-          <View style={styles.halfField}>
-            <Text style={styles.fieldLabel}>Largest (inches)</Text>
+          <View style={s.halfField}>
+            <Text style={s.fieldLabel}>Largest (inches)</Text>
             <TextInput
-              style={styles.input}
+              style={s.input}
               value={sizeInches}
               onChangeText={setSizeInches}
               keyboardType="decimal-pad"
@@ -282,43 +307,35 @@ export default function SubmitReportScreen({ onClose, onSubmitted }) {
           </View>
         </View>
 
-        {/* Location */}
-        <SectionHeader title="Location *"/>
+        <Text style={s.sectionHd}>Location *</Text>
         <TextInput
-          style={styles.input}
+          style={s.input}
           value={locationName}
           onChangeText={setLocationName}
           placeholder="e.g. South Shore, Lake Pontchartrain"
           placeholderTextColor={Colors.textMuted}
         />
-        <TouchableOpacity
-          style={styles.gpsBtn}
-          onPress={getGPS}
-          disabled={gpsLoading}
-        >
+        <TouchableOpacity style={s.gpsBtn} onPress={getGPS} disabled={gpsLoading}>
           {gpsLoading
             ? <ActivityIndicator size="small" color={Colors.brackishWater}/>
-            : <Text style={styles.gpsTxt}>
+            : <Text style={s.gpsTxt}>
                 {gpsCoords ? '✓ GPS location captured' : '◎ Capture GPS coordinates'}
               </Text>
           }
         </TouchableOpacity>
 
-        {/* Bait */}
-        <SectionHeader title="Bait / lure"/>
-        <SingleSelect options={BAIT_OPTIONS} selected={bait} onSelect={setBait}/>
+        <Text style={s.sectionHd}>Bait / lure</Text>
+        <SingleSelect options={BAIT_OPTIONS} selected={bait} onSelect={setBait} s={s}/>
 
-        {/* Technique */}
-        <SectionHeader title="Technique"/>
-        <SingleSelect options={TECHNIQUE_OPTIONS} selected={technique} onSelect={setTechnique}/>
+        <Text style={s.sectionHd}>Technique</Text>
+        <SingleSelect options={TECHNIQUE_OPTIONS} selected={technique} onSelect={setTechnique} s={s}/>
 
-        {/* Conditions */}
-        <SectionHeader title="Water conditions"/>
-        <View style={styles.row}>
-          <View style={styles.halfField}>
-            <Text style={styles.fieldLabel}>Water temp (°F)</Text>
+        <Text style={s.sectionHd}>Water conditions</Text>
+        <View style={s.row}>
+          <View style={s.halfField}>
+            <Text style={s.fieldLabel}>Water temp (°F)</Text>
             <TextInput
-              style={styles.input}
+              style={s.input}
               value={waterTemp}
               onChangeText={setWaterTemp}
               keyboardType="decimal-pad"
@@ -326,10 +343,10 @@ export default function SubmitReportScreen({ onClose, onSubmitted }) {
               placeholderTextColor={Colors.textMuted}
             />
           </View>
-          <View style={styles.halfField}>
-            <Text style={styles.fieldLabel}>Wind speed (mph)</Text>
+          <View style={s.halfField}>
+            <Text style={s.fieldLabel}>Wind speed (mph)</Text>
             <TextInput
-              style={styles.input}
+              style={s.input}
               value={windSpeed}
               onChangeText={setWindSpeed}
               keyboardType="decimal-pad"
@@ -339,25 +356,22 @@ export default function SubmitReportScreen({ onClose, onSubmitted }) {
           </View>
         </View>
 
-        {/* Tide */}
-        <Text style={styles.fieldLabel}>Tide direction</Text>
-        <SingleSelect options={TIDE_OPTIONS} selected={tideDir} onSelect={setTideDir}/>
+        <Text style={s.fieldLabel}>Tide direction</Text>
+        <SingleSelect options={TIDE_OPTIONS} selected={tideDir} onSelect={setTideDir} s={s}/>
 
-        {/* Rating */}
-        <SectionHeader title="Trip rating"/>
-        <View style={styles.ratingRow}>
+        <Text style={s.sectionHd}>Trip rating</Text>
+        <View style={s.ratingRow}>
           {[1, 2, 3, 4, 5].map(r => (
-            <TouchableOpacity key={r} onPress={() => setRating(r)} style={styles.ratingBtn}>
-              <Text style={[styles.ratingStar, r <= rating && styles.ratingStarOn]}>★</Text>
+            <TouchableOpacity key={r} onPress={() => setRating(r)} style={s.ratingBtn}>
+              <Text style={[s.ratingStar, r <= rating && s.ratingStarOn]}>★</Text>
             </TouchableOpacity>
           ))}
-          <Text style={styles.ratingLabel}>{RATING_LABELS[rating]}</Text>
+          <Text style={s.ratingLabel}>{RATING_LABELS[rating]}</Text>
         </View>
 
-        {/* Notes */}
-        <SectionHeader title="Notes & tips"/>
+        <Text style={s.sectionHd}>Notes & tips</Text>
         <TextInput
-          style={[styles.input, styles.textarea]}
+          style={[s.input, s.textarea]}
           value={notes}
           onChangeText={setNotes}
           placeholder="Share what worked — bait presentation, time of day, water clarity, specific structure..."
@@ -367,30 +381,28 @@ export default function SubmitReportScreen({ onClose, onSubmitted }) {
           textAlignVertical="top"
         />
 
-        {/* Photo */}
-        <SectionHeader title="Photo"/>
+        <Text style={s.sectionHd}>Photo</Text>
         {photo && (
-          <Image source={{ uri: photo.uri }} style={styles.photoPreview} resizeMode="cover"/>
+          <Image source={{ uri: photo.uri }} style={s.photoPreview} resizeMode="cover"/>
         )}
-        <View style={styles.photoRow}>
-          <TouchableOpacity style={styles.photoBtn} onPress={takePhoto}>
-            <Text style={styles.photoBtnTxt}>📷 Take photo</Text>
+        <View style={s.photoRow}>
+          <TouchableOpacity style={s.photoBtn} onPress={takePhoto}>
+            <Text style={s.photoBtnTxt}>📷 Take photo</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.photoBtn} onPress={pickPhoto}>
-            <Text style={styles.photoBtnTxt}>🖼 Choose photo</Text>
+          <TouchableOpacity style={s.photoBtn} onPress={pickPhoto}>
+            <Text style={s.photoBtnTxt}>🖼 Choose photo</Text>
           </TouchableOpacity>
         </View>
 
-        {/* Submit button (bottom) */}
         <TouchableOpacity
-          style={[styles.bigSubmit, submitting && styles.submitBtnDisabled]}
+          style={[s.bigSubmit, submitting && s.submitBtnDisabled]}
           onPress={handleSubmit}
           disabled={submitting}
           activeOpacity={0.85}
         >
           {submitting
-            ? <ActivityIndicator color={Colors.saltWhite}/>
-            : <Text style={styles.bigSubmitTxt}>Submit catch report 🎣</Text>
+            ? <ActivityIndicator color={Colors.textOnDark}/>
+            : <Text style={s.bigSubmitTxt}>Submit catch report 🎣</Text>
           }
         </TouchableOpacity>
 
@@ -399,54 +411,3 @@ export default function SubmitReportScreen({ onClose, onSubmitted }) {
     </View>
   )
 }
-
-const styles = StyleSheet.create({
-  container:    { flex: 1, backgroundColor: Colors.saltWhite },
-
-  header:       { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: Spacing.md, paddingTop: 20, backgroundColor: Colors.brackishWater },
-  cancelBtn:    { padding: 4 },
-  cancelTxt:    { fontSize: Typography.base, color: 'rgba(255,255,255,0.8)' },
-  headerTitle:  { fontFamily: 'Georgia', fontSize: Typography.md, fontWeight: '700', color: Colors.saltWhite },
-  submitBtn:    { backgroundColor: Colors.doubloonGold, borderRadius: Radius.md, paddingHorizontal: 14, paddingVertical: 6 },
-  submitBtnDisabled: { opacity: 0.5 },
-  submitTxt:    { fontSize: Typography.base, fontWeight: Typography.bold, color: Colors.deepSea },
-
-  content:      { padding: Spacing.lg, gap: Spacing.sm, paddingBottom: 40 },
-  sectionHd:    { fontSize: Typography.sm, fontWeight: Typography.medium, color: Colors.textSecondary, letterSpacing: 0.5, textTransform: 'uppercase', marginTop: Spacing.md, marginBottom: 6 },
-
-  multiGrid:    { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  multiBtn:     { paddingVertical: 8, alignItems: 'center', borderRadius: Radius.md, borderWidth: 0.5, borderColor: Colors.border, backgroundColor: Colors.cardBg },
-  multiBtnOn:   { backgroundColor: Colors.brackishWater, borderColor: Colors.brackishWater },
-  multiTxt:     { fontSize: Typography.xs, color: Colors.textSecondary, fontWeight: Typography.medium },
-  multiTxtOn:   { color: Colors.saltWhite },
-
-  singleRow:    { flexDirection: 'row', gap: 6, paddingBottom: 4 },
-  singleChip:   { paddingHorizontal: 12, paddingVertical: 6, borderRadius: Radius.full, borderWidth: 0.5, borderColor: Colors.border, backgroundColor: Colors.cardBg },
-  singleChipOn: { backgroundColor: Colors.doubloonGold, borderColor: Colors.doubloonGold },
-  singleTxt:    { fontSize: Typography.sm, color: Colors.textSecondary },
-  singleTxtOn:  { color: Colors.deepSea, fontWeight: Typography.medium },
-
-  row:          { flexDirection: 'row', gap: Spacing.md },
-  halfField:    { flex: 1, gap: 5 },
-  fieldLabel:   { fontSize: Typography.xs, color: Colors.textSecondary, marginBottom: 4 },
-
-  input:        { backgroundColor: Colors.parchment, borderWidth: 0.5, borderColor: Colors.borderMid, borderRadius: Radius.md, paddingHorizontal: Spacing.md, paddingVertical: 11, fontSize: Typography.base, color: Colors.textPrimary },
-  textarea:     { minHeight: 100, paddingTop: 11 },
-
-  gpsBtn:       { borderWidth: 0.5, borderColor: Colors.brackishWater, borderRadius: Radius.md, paddingVertical: 10, alignItems: 'center', marginTop: 8 },
-  gpsTxt:       { fontSize: Typography.sm, color: Colors.brackishWater, fontWeight: Typography.medium },
-
-  ratingRow:    { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  ratingBtn:    { padding: 4 },
-  ratingStar:   { fontSize: 28, color: Colors.border },
-  ratingStarOn: { color: Colors.doubloonGold },
-  ratingLabel:  { fontSize: Typography.sm, color: Colors.textSecondary, marginLeft: 8 },
-
-  photoPreview: { width: '100%', height: 200, borderRadius: Radius.lg, marginBottom: 8 },
-  photoRow:     { flexDirection: 'row', gap: Spacing.md },
-  photoBtn:     { flex: 1, borderWidth: 0.5, borderColor: Colors.border, borderRadius: Radius.md, paddingVertical: 12, alignItems: 'center', backgroundColor: Colors.cardBg },
-  photoBtnTxt:  { fontSize: Typography.sm, color: Colors.textSecondary },
-
-  bigSubmit:    { backgroundColor: Colors.brackishWater, borderRadius: Radius.lg, paddingVertical: 16, alignItems: 'center', marginTop: Spacing.lg },
-  bigSubmitTxt: { fontFamily: 'Georgia', fontSize: Typography.md, fontWeight: Typography.bold, color: Colors.saltWhite, letterSpacing: 0.5 },
-}) 

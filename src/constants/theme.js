@@ -1,34 +1,53 @@
-export const Colors = {
-  // Primary palette
-  brackishWater: '#4A8FA8',   // Teal — sidebar, topbar, CTAs
-  midnightTide:  '#1A3A52',   // Mid navy — secondary surfaces
-  deepSea:       '#0D2137',   // Dark navy — body text, map bg
-  doubloonGold:  '#C49A2A',   // Gold — logo, accents, active states
-  amberLight:    '#E8A838',   // Lighter gold — highlights
-  marshGreen:    '#2E8B5A',   // Green — active bite, good conditions
-  saltWhite:     '#F5F0E8',   // Warm white — primary background
-  parchment:     '#EDE5D0',   // Cream — secondary background
+export function getTheme(mode = 'dark') {
+  const d = mode !== 'light'
+  return {
+    // Accent — same in both modes
+    brackishWater: '#4A8FA8',
+    doubloonGold:  '#C49A2A',
+    amberLight:    '#E8A838',
+    marshGreen:    '#2E8B5A',
+    parchment:     '#EDE5D0',
 
-  // Semantic
-  danger:        '#E24B4A',
-  warning:       '#F39C12',
-  success:       '#2E8B5A',
+    // Semantic — same in both modes
+    danger:  '#E24B4A',
+    warning: '#F39C12',
+    success: '#2E8B5A',
 
-  // UI grays
-  textPrimary:   '#0D2137',
-  textSecondary: '#5A7A8A',
-  textMuted:     '#8AACBA',
-  border:        'rgba(13, 33, 55, 0.12)',
-  borderMid:     'rgba(13, 33, 55, 0.2)',
-  cardBg:        '#FFFFFF',
-  inputBg:       '#FFFFFF',
+    // Always fixed (topbar, tabbar)
+    topbarBg: '#0D2137',
+    tabBarBg: '#0D2137',
+
+    // Surface — mode-dependent
+    midnightTide: d ? '#1A3A52' : '#F0EBE0',
+    deepSea:      d ? '#0D2137' : '#FFFFFF',
+    cardBg:       d ? '#0D2137' : '#FFFFFF',
+    screenBg:     d ? '#1A3A52' : '#F0EBE0',
+    inputBg:      d ? 'rgba(255,255,255,0.06)' : '#F7F3EC',
+    inputBorder:  d ? 'rgba(255,255,255,0.15)'  : 'rgba(13,33,55,0.12)',
+
+    // Text — mode-dependent
+    saltWhite:     d ? '#F5F0E8' : '#0D2137',
+    textPrimary:   d ? '#F5F0E8' : '#0D2137',
+    textSecondary: d ? 'rgba(255,255,255,0.45)' : '#5A7A8A',
+    textMuted:     d ? 'rgba(255,255,255,0.3)'  : 'rgba(13,33,55,0.4)',
+    textOnDark:    '#F5F0E8',
+
+    // Borders — mode-dependent
+    border:    d ? 'rgba(255,255,255,0.08)' : 'rgba(13,33,55,0.1)',
+    borderMid: d ? 'rgba(255,255,255,0.15)' : 'rgba(13,33,55,0.15)',
+
+    // Backward-compat aliases
+    textOnDarkSecondary: d ? 'rgba(255,255,255,0.45)' : '#5A7A8A',
+    borderDark:          d ? 'rgba(255,255,255,0.08)'  : 'rgba(13,33,55,0.1)',
+  }
 }
 
-export const Typography = {
-  fontSerif:  'Georgia',
-  fontSans:   'System',
+// Static dark-mode export kept for any code not yet on dynamic theme
+export const Colors = getTheme('dark')
 
-  // Sizes
+export const Typography = {
+  fontSerif: 'Georgia',
+  fontSans:  'System',
   xs:   10,
   sm:   11,
   base: 13,
@@ -37,8 +56,6 @@ export const Typography = {
   xl:   20,
   xxl:  26,
   hero: 32,
-
-  // Weights
   regular: '400',
   medium:  '500',
   bold:    '700',

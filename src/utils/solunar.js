@@ -1,4 +1,4 @@
-import { Colors } from '../constants/theme'
+import { Colors as DefaultColors } from '../constants/theme'
 
 export function getSolunarForDate(date = new Date(), lat = 30.1766, lng = -90.1146) {
   const JD          = date / 86400000 + 2440587.5
@@ -78,7 +78,7 @@ export function buildActivityCurve(sol) {
   })
 }
 
-export function scoreColor(score) {
+export function scoreColor(score, Colors = DefaultColors) {
   if (score >= 80) return Colors.marshGreen
   if (score >= 65) return Colors.doubloonGold
   if (score >= 50) return Colors.brackishWater

@@ -9,7 +9,8 @@
       "PowerShell(Get-ChildItem *)",
       "PowerShell(git *)",
       "PowerShell(git add *)",
-      "PowerShell(git push *)"
+      "PowerShell(git push *)",
+      "PowerShell(New-Item *)"
     ]
   }
 }

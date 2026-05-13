@@ -1,20 +1,115 @@
-import React, { useState } from 'react'
+import React, { useState, useMemo } from 'react'
 import {
   View, Text, TextInput, TouchableOpacity,
   StyleSheet, ScrollView, KeyboardAvoidingView,
   Platform, ActivityIndicator, Alert,
 } from 'react-native'
-import { Colors, Typography, Spacing, Radius } from '../../constants/theme'
+import { Typography, Spacing, Radius } from '../../constants/theme'
+import { useTheme } from '../../hooks/useTheme'
 import HelmCrest from '../../components/HelmCrest'
 import { useAuth } from '../../hooks/useAuth'
 
 export default function LoginScreen() {
+  const { Colors } = useTheme()
   const { signIn, signUp } = useAuth()
-  const [mode,     setMode]     = useState('signin') // 'signin' | 'signup'
+  const [mode,     setMode]     = useState('signin')
   const [email,    setEmail]    = useState('')
   const [password, setPassword] = useState('')
   const [fullName, setFullName] = useState('')
   const [loading,  setLoading]  = useState(false)
+
+  const s = useMemo(() => StyleSheet.create({
+    flex: {
+      flex: 1,
+      backgroundColor: Colors.screenBg,
+    },
+    scroll: {
+      flexGrow: 1,
+      alignItems: 'center',
+      paddingHorizontal: Spacing.lg,
+      paddingTop: 60,
+      paddingBottom: 32,
+      backgroundColor: Colors.screenBg,
+    },
+    hero: {
+      alignItems: 'center',
+      marginBottom: Spacing.xxl,
+    },
+    tagline: {
+      fontFamily: Typography.fontSerif,
+      fontSize: Typography.base,
+      color: Colors.textSecondary,
+      marginTop: Spacing.md,
+      letterSpacing: 0.3,
+      textAlign: 'center',
+    },
+    card: {
+      width: '100%',
+      maxWidth: 400,
+      backgroundColor: Colors.cardBg,
+      borderRadius: Radius.lg,
+      borderWidth: 0.5,
+      borderColor: Colors.border,
+      padding: Spacing.lg,
+      shadowColor: '#0D2137',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.06,
+      shadowRadius: 8,
+      elevation: 2,
+    },
+    tabs: {
+      flexDirection: 'row',
+      backgroundColor: Colors.inputBg,
+      borderRadius: Radius.md,
+      padding: 3,
+      marginBottom: Spacing.lg,
+    },
+    tab: {
+      flex: 1,
+      paddingVertical: Spacing.sm,
+      alignItems: 'center',
+      borderRadius: Radius.sm,
+    },
+    tabActive:     { backgroundColor: Colors.brackishWater },
+    tabText:       { fontSize: Typography.base, color: Colors.textSecondary, fontWeight: '500' },
+    tabTextActive: { color: Colors.textOnDark },
+    fields:        { gap: Spacing.md, marginBottom: Spacing.lg },
+    fieldGroup:    { gap: Spacing.xs },
+    label: {
+      fontSize: Typography.sm,
+      color: Colors.textSecondary,
+      fontWeight: '500',
+      letterSpacing: 0.3,
+    },
+    input: {
+      backgroundColor: Colors.inputBg,
+      borderWidth: 0.5,
+      borderColor: Colors.borderMid,
+      borderRadius: Radius.md,
+      paddingHorizontal: Spacing.md,
+      paddingVertical: 12,
+      fontSize: Typography.base,
+      color: Colors.textPrimary,
+    },
+    btn:         { backgroundColor: Colors.brackishWater, borderRadius: Radius.md, paddingVertical: 14, alignItems: 'center' },
+    btnDisabled: { opacity: 0.6 },
+    btnText: {
+      fontFamily: Typography.fontSerif,
+      fontSize: Typography.md,
+      fontWeight: '700',
+      color: Colors.textOnDark,
+      letterSpacing: 0.5,
+    },
+    forgotWrap: { alignItems: 'center', marginTop: Spacing.md },
+    forgot:     { fontSize: Typography.sm, color: Colors.brackishWater },
+    footer: {
+      marginTop: Spacing.xxl,
+      fontSize: Typography.xs,
+      color: Colors.textMuted,
+      letterSpacing: 1,
+      fontFamily: Typography.fontSerif,
+    },
+  }), [Colors])
 
   const handleSubmit = async () => {
     if (!email || !password) {
@@ -49,48 +144,48 @@ export default function LoginScreen() {
 
   return (
     <KeyboardAvoidingView
-      style={styles.flex}
+      style={s.flex}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <ScrollView
-        contentContainerStyle={styles.scroll}
+        contentContainerStyle={s.scroll}
         keyboardShouldPersistTaps="handled"
       >
         {/* Hero */}
-        <View style={styles.hero}>
-          <HelmCrest size={110} variant="light"/>
-          <Text style={styles.tagline}>Your fishing & boating command center</Text>
+        <View style={s.hero}>
+          <HelmCrest size={110} variant="dark"/>
+          <Text style={s.tagline}>Your fishing & boating command center</Text>
         </View>
 
         {/* Card */}
-        <View style={styles.card}>
+        <View style={s.card}>
           {/* Tab toggle */}
-          <View style={styles.tabs}>
+          <View style={s.tabs}>
             <TouchableOpacity
-              style={[styles.tab, mode === 'signin' && styles.tabActive]}
+              style={[s.tab, mode === 'signin' && s.tabActive]}
               onPress={() => setMode('signin')}
             >
-              <Text style={[styles.tabText, mode === 'signin' && styles.tabTextActive]}>
+              <Text style={[s.tabText, mode === 'signin' && s.tabTextActive]}>
                 Sign in
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.tab, mode === 'signup' && styles.tabActive]}
+              style={[s.tab, mode === 'signup' && s.tabActive]}
               onPress={() => setMode('signup')}
             >
-              <Text style={[styles.tabText, mode === 'signup' && styles.tabTextActive]}>
+              <Text style={[s.tabText, mode === 'signup' && s.tabTextActive]}>
                 Create account
               </Text>
             </TouchableOpacity>
           </View>
 
           {/* Fields */}
-          <View style={styles.fields}>
+          <View style={s.fields}>
             {mode === 'signup' && (
-              <View style={styles.fieldGroup}>
-                <Text style={styles.label}>Full name</Text>
+              <View style={s.fieldGroup}>
+                <Text style={s.label}>Full name</Text>
                 <TextInput
-                  style={styles.input}
+                  style={s.input}
                   placeholder="Jake Boudreaux"
                   placeholderTextColor={Colors.textMuted}
                   value={fullName}
@@ -100,10 +195,10 @@ export default function LoginScreen() {
               </View>
             )}
 
-            <View style={styles.fieldGroup}>
-              <Text style={styles.label}>Email</Text>
+            <View style={s.fieldGroup}>
+              <Text style={s.label}>Email</Text>
               <TextInput
-                style={styles.input}
+                style={s.input}
                 placeholder="captain@brackishpirate.com"
                 placeholderTextColor={Colors.textMuted}
                 value={email}
@@ -114,10 +209,10 @@ export default function LoginScreen() {
               />
             </View>
 
-            <View style={styles.fieldGroup}>
-              <Text style={styles.label}>Password</Text>
+            <View style={s.fieldGroup}>
+              <Text style={s.label}>Password</Text>
               <TextInput
-                style={styles.input}
+                style={s.input}
                 placeholder="••••••••"
                 placeholderTextColor={Colors.textMuted}
                 value={password}
@@ -130,14 +225,14 @@ export default function LoginScreen() {
 
           {/* Submit */}
           <TouchableOpacity
-            style={[styles.btn, loading && styles.btnDisabled]}
+            style={[s.btn, loading && s.btnDisabled]}
             onPress={handleSubmit}
             disabled={loading}
             activeOpacity={0.85}
           >
             {loading
-              ? <ActivityIndicator color={Colors.saltWhite} />
-              : <Text style={styles.btnText}>
+              ? <ActivityIndicator color={Colors.textOnDark}/>
+              : <Text style={s.btnText}>
                   {mode === 'signin' ? 'Set sail  →' : 'Join the crew  →'}
                 </Text>
             }
@@ -145,138 +240,17 @@ export default function LoginScreen() {
 
           {/* Footer link */}
           {mode === 'signin' && (
-            <TouchableOpacity style={styles.forgotWrap}>
-              <Text style={styles.forgot}>Forgot password?</Text>
+            <TouchableOpacity style={s.forgotWrap}>
+              <Text style={s.forgot}>Forgot password?</Text>
             </TouchableOpacity>
           )}
         </View>
 
         {/* Bottom tagline */}
-        <Text style={styles.footer}>
+        <Text style={s.footer}>
           Brackish Pirate · Fishing & Boating
         </Text>
       </ScrollView>
     </KeyboardAvoidingView>
   )
 }
-
-const styles = StyleSheet.create({
-  flex: {
-    flex: 1,
-    backgroundColor: Colors.saltWhite,
-  },
-  scroll: {
-    flexGrow: 1,
-    alignItems: 'center',
-    paddingHorizontal: Spacing.lg,
-    paddingTop: 60,
-    paddingBottom: 32,
-    backgroundColor: Colors.saltWhite,
-  },
-  hero: {
-    alignItems: 'center',
-    marginBottom: Spacing.xxl,
-  },
-  tagline: {
-    fontFamily: Typography.fontSerif,
-    fontSize: Typography.base,
-    color: Colors.textSecondary,
-    marginTop: Spacing.md,
-    letterSpacing: 0.3,
-    textAlign: 'center',
-  },
-  card: {
-    width: '100%',
-    maxWidth: 400,
-    backgroundColor: Colors.cardBg,
-    borderRadius: Radius.lg,
-    borderWidth: 0.5,
-    borderColor: Colors.border,
-    padding: Spacing.lg,
-    ...{
-      shadowColor: '#0D2137',
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.06,
-      shadowRadius: 8,
-      elevation: 2,
-    },
-  },
-  tabs: {
-    flexDirection: 'row',
-    backgroundColor: Colors.parchment,
-    borderRadius: Radius.md,
-    padding: 3,
-    marginBottom: Spacing.lg,
-  },
-  tab: {
-    flex: 1,
-    paddingVertical: Spacing.sm,
-    alignItems: 'center',
-    borderRadius: Radius.sm,
-  },
-  tabActive: {
-    backgroundColor: Colors.brackishWater,
-  },
-  tabText: {
-    fontSize: Typography.base,
-    color: Colors.textSecondary,
-    fontWeight: Typography.medium,
-  },
-  tabTextActive: {
-    color: Colors.saltWhite,
-  },
-  fields: {
-    gap: Spacing.md,
-    marginBottom: Spacing.lg,
-  },
-  fieldGroup: {
-    gap: Spacing.xs,
-  },
-  label: {
-    fontSize: Typography.sm,
-    color: Colors.textSecondary,
-    fontWeight: Typography.medium,
-    letterSpacing: 0.3,
-  },
-  input: {
-    backgroundColor: Colors.parchment,
-    borderWidth: 0.5,
-    borderColor: Colors.borderMid,
-    borderRadius: Radius.md,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: 12,
-    fontSize: Typography.base,
-    color: Colors.textPrimary,
-  },
-  btn: {
-    backgroundColor: Colors.brackishWater,
-    borderRadius: Radius.md,
-    paddingVertical: 14,
-    alignItems: 'center',
-  },
-  btnDisabled: {
-    opacity: 0.6,
-  },
-  btnText: {
-    fontFamily: Typography.fontSerif,
-    fontSize: Typography.md,
-    fontWeight: Typography.bold,
-    color: Colors.saltWhite,
-    letterSpacing: 0.5,
-  },
-  forgotWrap: {
-    alignItems: 'center',
-    marginTop: Spacing.md,
-  },
-  forgot: {
-    fontSize: Typography.sm,
-    color: Colors.brackishWater,
-  },
-  footer: {
-    marginTop: Spacing.xxl,
-    fontSize: Typography.xs,
-    color: Colors.textMuted,
-    letterSpacing: 1,
-    fontFamily: Typography.fontSerif,
-  },
-})

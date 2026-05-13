@@ -1,10 +1,11 @@
-import React, { useState, useRef } from 'react'
+import React, { useState, useRef, useMemo } from 'react'
 import {
   View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Modal,
 } from 'react-native'
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps'
 import * as Location from 'expo-location'
-import { Colors, Typography, Spacing, Radius } from '../constants/theme'
+import { Typography, Spacing, Radius } from '../constants/theme'
+import { useTheme } from '../hooks/useTheme'
 
 const GOOGLE_KEY = 'AIzaSyBzwOhq7uIKao4Xw4Bht-op0y4Yj3Umpaw'
 
@@ -22,11 +23,30 @@ export default function LocationPickerModal({
   visible, onClose, onSelect, title = 'Set Location',
   initialLat = 29.865, initialLng = -89.674,
 }) {
+  const { Colors } = useTheme()
   const mapRef      = useRef(null)
   const [pin,        setPin]        = useState({ lat: initialLat, lng: initialLng })
   const [pinName,    setPinName]    = useState('')
   const [loading,    setLoading]    = useState(false)
   const [gpsLoading, setGpsLoading] = useState(false)
+
+  const s = useMemo(() => StyleSheet.create({
+    container:      { flex: 1, backgroundColor: Colors.topbarBg },
+    header:         { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 52, paddingBottom: 10, backgroundColor: Colors.topbarBg, gap: 12 },
+    closeBtn:       { padding: 4 },
+    closeTxt:       { fontSize: 18, color: '#fff' },
+    title:          { flex: 1, fontSize: Typography.md, fontWeight: '700', color: '#fff', fontFamily: 'Georgia' },
+    gpsBtn:         { backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: Radius.full, paddingHorizontal: 12, paddingVertical: 5 },
+    gpsTxt:         { fontSize: Typography.sm, color: '#fff', fontWeight: '600' },
+    hint:           { fontSize: Typography.xs, color: 'rgba(255,255,255,0.45)', textAlign: 'center', paddingBottom: 6, backgroundColor: Colors.topbarBg },
+    map:            { flex: 1 },
+    pinEmoji:       { fontSize: 28 },
+    bottom:         { backgroundColor: Colors.topbarBg, padding: Spacing.lg, gap: Spacing.md },
+    locationName:   { fontSize: Typography.base, color: '#fff', textAlign: 'center', lineHeight: 22, minHeight: 36 },
+    confirmBtn:     { backgroundColor: Colors.brackishWater, borderRadius: Radius.md, paddingVertical: 14, alignItems: 'center' },
+    confirmDisabled:{ opacity: 0.35 },
+    confirmTxt:     { fontSize: Typography.base, fontWeight: '700', color: '#fff' },
+  }), [Colors])
 
   const handleMapPress = async (e) => {
     const { latitude: lat, longitude: lng } = e.nativeEvent.coordinate
@@ -89,6 +109,8 @@ export default function LocationPickerModal({
           provider={PROVIDER_GOOGLE}
           mapType="satellite"
           initialRegion={{ latitude: initialLat, longitude: initialLng, latitudeDelta: 0.8, longitudeDelta: 0.8 }}
+          minZoomLevel={3}
+          maxZoomLevel={18}
           onPress={handleMapPress}
         >
           {pin && (
@@ -118,21 +140,3 @@ export default function LocationPickerModal({
     </Modal>
   )
 }
-
-const s = StyleSheet.create({
-  container:      { flex: 1, backgroundColor: Colors.deepSea },
-  header:         { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 52, paddingBottom: 10, backgroundColor: Colors.deepSea, gap: 12 },
-  closeBtn:       { padding: 4 },
-  closeTxt:       { fontSize: 18, color: '#fff' },
-  title:          { flex: 1, fontSize: Typography.md, fontWeight: '700', color: '#fff', fontFamily: 'Georgia' },
-  gpsBtn:         { backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: Radius.full, paddingHorizontal: 12, paddingVertical: 5 },
-  gpsTxt:         { fontSize: Typography.sm, color: '#fff', fontWeight: '600' },
-  hint:           { fontSize: Typography.xs, color: 'rgba(255,255,255,0.45)', textAlign: 'center', paddingBottom: 6, backgroundColor: Colors.deepSea },
-  map:            { flex: 1 },
-  pinEmoji:       { fontSize: 28 },
-  bottom:         { backgroundColor: Colors.deepSea, padding: Spacing.lg, gap: Spacing.md },
-  locationName:   { fontSize: Typography.base, color: '#fff', textAlign: 'center', lineHeight: 22, minHeight: 36 },
-  confirmBtn:     { backgroundColor: Colors.brackishWater, borderRadius: Radius.md, paddingVertical: 14, alignItems: 'center' },
-  confirmDisabled:{ opacity: 0.35 },
-  confirmTxt:     { fontSize: Typography.base, fontWeight: '700', color: '#fff' },
-})

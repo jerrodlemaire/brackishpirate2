@@ -4,18 +4,18 @@ import Svg, {
 } from 'react-native-svg'
 
 // variant: 'dark' (gold on navy) | 'light' (navy on parchment) | 'mono' (all gold)
-export default function HelmCrest({ size = 80, variant = 'dark' }) {
+export default function HelmCrest({ size = 80, variant = 'dark', hubColor }) {
   const scale = size / 100
 
   const ring      = variant === 'light' ? '#0D2137' : '#C49A2A'
-  const field     = variant === 'dark'  ? '#0A1C2E'
+  const field     = variant === 'dark'  ? '#0D2137'
                   : variant === 'mono'  ? 'transparent'
                   : '#EDE5D0'
   const spoke     = variant === 'light' ? '#0D2137' : '#C49A2A'
   const hub       = variant === 'light' ? '#0D2137' : '#C49A2A'
-  const hubCenter = variant === 'dark'  ? '#0A1C2E'
+  const hubCenter = hubColor ?? (variant === 'dark'  ? '#0D2137'
                   : variant === 'mono'  ? 'transparent'
-                  : '#EDE5D0'
+                  : '#EDE5D0')
   const hubDot    = '#C49A2A'
   const wave      = '#4A8FA8'
   const wordmark  = variant === 'light' ? '#0D2137' : '#F5F0E8'

@@ -1,0 +1,37 @@
+{
+  "cli": {
+    "version": ">= 13.0.0",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "channel": "development"
+    },
+    "preview": {
+      "distribution": "store",
+      "channel": "preview",
+      "autoIncrement": true
+    },
+    "production": {
+      "distribution": "store",
+      "channel": "production",
+      "autoIncrement": true
+    }
+  },
+  "submit": {
+    "preview": {
+      "ios": {
+        "appleId": "jerrodlemaire@gmail.com",
+        "appleTeamId": "4S3DZ876R7"
+      }
+    },
+    "production": {
+      "ios": {
+        "appleId": "jerrodlemaire@gmail.com",
+        "appleTeamId": "4S3DZ876R7"
+      }
+    }
+  }
+}
