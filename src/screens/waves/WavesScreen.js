@@ -173,7 +173,7 @@ function WavesDayStrip({ dailyMax, selectedIdx, onSelect }) {
     num:     { fontSize: Typography.md, fontWeight: '700', color: '#fff' },
     wave:    { fontSize: 12 },
     ht:      { fontSize: Typography.sm, fontWeight: '700', color: Colors.brackishWater },
-    unit:    { fontSize: 8, color: 'rgba(255,255,255,0.5)' },
+    unit:    { fontSize: 10, color: 'rgba(255,255,255,0.5)' },
     textSel: { color: '#fff' },
   }), [Colors])
 
@@ -277,7 +277,7 @@ export default function WavesScreen({ navigation }) {
     dailyGrid:   { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: Spacing.md, height: 110 },
     dayCol:      { alignItems: 'center', gap: 3, justifyContent: 'flex-end', flex: 1 },
     dayWave:     { fontSize: Typography.sm, fontWeight: '700', color: Colors.textPrimary },
-    dayWaveUnit: { fontSize: 8, color: Colors.textMuted },
+    dayWaveUnit: { fontSize: 10, color: Colors.textMuted },
     dayBar:      { width: 18, borderRadius: 4, opacity: 0.8 },
     dayName:     { fontSize: 9, color: Colors.textSecondary },
     dayToday:    { color: Colors.brackishWater, fontWeight: '700' },

@@ -95,7 +95,7 @@ function ActivityWave({ sol, scrubIdx, Colors }) {
     gridLbl:   { position: 'absolute', left: 0, width: PAD_L - 4, textAlign: 'right', fontSize: 11, fontWeight: 'bold', color: `${Colors.doubloonGold}8C` },
     nowLine:   { position: 'absolute', top: PAD_T, bottom: PAD_B, width: 1.5, backgroundColor: Colors.brackishWater },
     scrubLine: { position: 'absolute', top: PAD_T, bottom: PAD_B, width: 1, backgroundColor: Colors.doubloonGold, opacity: 0.8 },
-    xLbl:      { position: 'absolute', fontSize: 10, fontWeight: 'bold', color: `${Colors.doubloonGold}99` },
+    xLbl:      { position: 'absolute', fontSize: 11, fontWeight: 'bold', color: `${Colors.doubloonGold}99` },
   }), [Colors])
 
   return (
@@ -401,6 +401,7 @@ export default function DashboardScreen({ navigation }) {
     dataCardTeal:  { borderTopColor: Colors.brackishWater },
     dataCardGold:  { borderTopColor: Colors.doubloonGold },
     dataCardGreen: { borderTopColor: Colors.marshGreen },
+    dataCardNavy:  { borderTopColor: '#0D2137' },
     dataCardLabel: { fontSize: 9, fontWeight: '700', color: Colors.textSecondary, letterSpacing: 1.2, marginBottom: 2 },
     dataCardVal:   { fontSize: Typography.lg, fontWeight: '700', fontFamily: 'Georgia' },
     dataCardSub:   { fontSize: Typography.xs, color: Colors.textSecondary, marginBottom: 6 },
@@ -485,7 +486,7 @@ export default function DashboardScreen({ navigation }) {
           <MiniSparkline values={tempSpark} color={Colors.marshGreen}/>
         </TouchableOpacity>
 
-        <TouchableOpacity style={[s.dataCard, s.dataCardTeal]} onPress={() => navigation.navigate('Waves')} activeOpacity={0.8}>
+        <TouchableOpacity style={[s.dataCard, s.dataCardNavy]} onPress={() => navigation.navigate('Waves')} activeOpacity={0.8}>
           <Text style={s.dataCardLabel}>WAVES</Text>
           <Text style={[s.dataCardVal, { color: Colors.brackishWater }]}>{waveHt !== null ? `${waveHt} ft` : '—'}</Text>
           <Text style={s.dataCardSub}>{waveHt !== null ? `${waveDirStr} swell` : 'Loading…'}</Text>
