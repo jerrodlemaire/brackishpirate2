@@ -8,7 +8,7 @@ import Svg, { Path, G, Line, Defs, LinearGradient, Stop, Polygon } from 'react-n
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Typography, Spacing, Radius } from '../../constants/theme'
 import { useTheme } from '../../hooks/useTheme'
-import { fetchWeatherAndForecast, weatherEmoji, windDir } from '../../utils/weather'
+import { fetchWeatherAndForecast, weatherEmoji, windDir, getWindColor } from '../../utils/weather'
 import { useDataLocation } from '../../hooks/useDataLocation'
 import LocationChip from '../../components/LocationChip'
 import LocationPickerModal from '../../components/LocationPickerModal'
@@ -333,8 +333,9 @@ function WindChart({ speeds, dirs }) {
   const pan  = panRef.current
   const pts  = speeds.map((v, i) => ({ x: PAD_L + i * stepX, y: PAD_T + PLOT_H - ((v - minVal) / range) * PLOT_H, v }))
   const nowX = PAD_L + Math.min(new Date().getHours(), speeds.length - 1) * stepX
-  const scrub = scrubIdx !== null ? pts[scrubIdx] : null
-  const gridVals = [0, Math.round(maxVal * 0.5), Math.round(maxVal)]
+  const scrub      = scrubIdx !== null ? pts[scrubIdx] : null
+  const lineColor  = getWindColor(maxVal)
+  const gridVals   = [0, Math.round(maxVal * 0.5), Math.round(maxVal)]
 
   // Arrow markers every 3 hours
   const arrowHours = [0, 3, 6, 9, 12, 15, 18, 21]
@@ -344,16 +345,16 @@ function WindChart({ speeds, dirs }) {
       <Svg width={CHART_W} height={CHART_H - PAD_B + 4} style={{ position: 'absolute', top: 0, left: 0 }}>
         <Defs>
           <LinearGradient id="windGrad" x1="0" y1="0" x2="0" y2="1">
-            <Stop offset="0" stopColor={Colors.brackishWater} stopOpacity="0.35"/>
-            <Stop offset="1" stopColor={Colors.brackishWater} stopOpacity="0.03"/>
+            <Stop offset="0" stopColor={lineColor} stopOpacity="0.35"/>
+            <Stop offset="1" stopColor={lineColor} stopOpacity="0.03"/>
           </LinearGradient>
         </Defs>
         {gridVals.map((v, i) => {
           const y = PAD_T + PLOT_H - ((v - minVal) / range) * PLOT_H
-          return <Path key={i} d={`M ${PAD_L},${y.toFixed(1)} L ${CHART_W - PAD_R},${y.toFixed(1)}`} stroke="rgba(74,143,168,0.12)" strokeWidth="0.5"/>
+          return <Path key={i} d={`M ${PAD_L},${y.toFixed(1)} L ${CHART_W - PAD_R},${y.toFixed(1)}`} stroke={`${lineColor}20`} strokeWidth="0.5"/>
         })}
         <Path d={smoothAreaPath(pts, CHART_H - PAD_B)} fill="url(#windGrad)"/>
-        <Path d={smoothBezierPath(pts)} fill="none" stroke={Colors.brackishWater} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+        <Path d={smoothBezierPath(pts)} fill="none" stroke={lineColor} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
       </Svg>
 
       {gridVals.map((v, i) => {
@@ -363,8 +364,8 @@ function WindChart({ speeds, dirs }) {
       <View style={[wc.nowLine, { left: nowX }]}/>
       {scrub && (
         <>
-          <View style={[wc.scrubLine, { left: scrub.x }]}/>
-          <View style={[wc.bubble, { left: Math.min(Math.max(scrub.x - 40, PAD_L), CHART_W - PAD_R - 90), top: scrub.y - 40 }]}>
+          <View style={[wc.scrubLine, { left: scrub.x, backgroundColor: getWindColor(scrub.v) }]}/>
+          <View style={[wc.bubble, { left: Math.min(Math.max(scrub.x - 40, PAD_L), CHART_W - PAD_R - 90), top: scrub.y - 40, backgroundColor: getWindColor(scrub.v) }]}>
             {dirs && dirs[scrubIdx] != null && <WindArrow deg={dirs[scrubIdx]} size={14} color="#fff"/>}
             <Text style={wc.bubbleVal}>{Math.round(scrub.v)} mph</Text>
           </View>
@@ -421,14 +422,15 @@ function TenDayWindStrip({ daily }) {
         const spd     = Math.round(daily.windspeed_10m_max[i])
         const dir     = daily.winddirection_10m_dominant?.[i]
         const barW    = (spd / maxSpeed) * 100
+        const barColor = getWindColor(spd)
         return (
           <View key={i} style={ws.row}>
             <Text style={[ws.day, isToday && ws.dayToday]}>{dayName}</Text>
             <View style={ws.arrow}>
-              {dir != null && <WindArrow deg={dir} size={16} color={Colors.brackishWater}/>}
+              {dir != null && <WindArrow deg={dir} size={16} color={barColor}/>}
             </View>
             <View style={ws.barWrap}>
-              <View style={[ws.bar, { width: `${barW}%` }]}/>
+              <View style={[ws.bar, { width: `${barW}%`, backgroundColor: barColor }]}/>
             </View>
             <Text style={ws.speed}>{spd} mph</Text>
           </View>
@@ -616,7 +618,7 @@ export default function WeatherScreen({ navigation }) {
               {isToday && wSpeeds.length > 0 && (
                 <View style={s.heroSparkRow}>
                   <Text style={s.heroSparkLbl}>HOURLY WIND SPEED (mph)</Text>
-                  <MiniSparkline values={wSpeeds} color={Colors.brackishWater} h={28} w={CHART_W - Spacing.md * 2}/>
+                  <MiniSparkline values={wSpeeds} color={getWindColor(cur?.windspeed_10m ?? 0)} h={28} w={CHART_W - Spacing.md * 2}/>
                 </View>
               )}
             </View>
