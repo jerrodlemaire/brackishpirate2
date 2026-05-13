@@ -28,7 +28,7 @@ function TabIcon({ name, focused, activeColor }) {
   if (name === 'Tides') {
     return (
       <View style={{ opacity: focused ? 1 : 0.35 }}>
-        <HelmCrest size={20} variant="mono"/>
+        <HelmCrest size={32} variant="mono"/>
       </View>
     )
   }
@@ -68,8 +68,8 @@ export default function AppNavigator() {
         tabBarActiveTintColor:   Colors.doubloonGold,
         tabBarInactiveTintColor: 'rgba(255,255,255,0.4)',
         tabBarLabelStyle: {
-          fontSize:   11,
-          fontWeight: '500',
+          fontSize:   13,
+          fontWeight: '600',
           marginTop:  2,
         },
         tabBarItemStyle: {
@@ -89,7 +89,7 @@ export default function AppNavigator() {
       <Tab.Screen
         name="Map"
         component={MapScreen}
-        options={{ title: 'Map & Hotspots' }}
+        options={{ title: 'Map & Hotspots', tabBarLabel: 'Map' }}
       />
       <Tab.Screen
         name="Tides"
@@ -99,7 +99,7 @@ export default function AppNavigator() {
       <Tab.Screen
         name="CaptainsLog"
         component={CaptainsLogScreen}
-        options={{ title: "Captain's Log", tabBarLabel: 'My Log', headerShown: false }}
+        options={{ title: "Captain's Log", tabBarLabel: 'Logbook', headerShown: false }}
       />
       <Tab.Screen
         name="Shop"
@@ -134,5 +134,5 @@ export default function AppNavigator() {
 
 const s = StyleSheet.create({
   iconWrap: { alignItems: 'center', justifyContent: 'center' },
-  iconText: { fontSize: 18, color: 'rgba(255,255,255,0.4)' },
+  iconText: { fontSize: 32, color: 'rgba(255,255,255,0.4)' },
 })
