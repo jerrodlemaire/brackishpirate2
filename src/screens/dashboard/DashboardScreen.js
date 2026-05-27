@@ -5,11 +5,13 @@ import {
 } from 'react-native'
 import Svg, { Polyline, Path, Defs, LinearGradient, Stop } from 'react-native-svg'
 import * as Haptics from 'expo-haptics'
+import { useNavigation } from '@react-navigation/native'
 import { Typography, Spacing, Radius } from '../../constants/theme'
 import { useTheme } from '../../hooks/useTheme'
 import { getSolunarForDate, buildActivityCurve, scoreColor, scoreLabel } from '../../utils/solunar'
 import { fetchTideHourly } from '../../utils/tides'
 import { fetchWeatherAndForecast, fetchMarineData, fetchWaterTemp, windDir, getWindColor } from '../../utils/weather'
+import { smoothBezierPath, smoothAreaPath } from '../../utils/chart'
 import JollyRoger from '../../components/JollyRoger'
 import WindCompass from '../../components/WindCompass'
 import HomePortPicker from '../../components/HomePortPicker'
@@ -26,30 +28,6 @@ const PAD_T   = 16
 const PAD_B   = 28
 const PLOT_W  = CHART_W - PAD_L - PAD_R
 const PLOT_H  = CHART_H - PAD_T - PAD_B
-
-function smoothBezierPath(pts) {
-  if (pts.length < 2) return ''
-  const t = 0.35
-  let d = `M ${pts[0].x.toFixed(1)},${pts[0].y.toFixed(1)}`
-  for (let i = 0; i < pts.length - 1; i++) {
-    const p0 = pts[Math.max(0, i - 1)]
-    const p1 = pts[i]
-    const p2 = pts[i + 1]
-    const p3 = pts[Math.min(pts.length - 1, i + 2)]
-    const cp1x = p1.x + (p2.x - p0.x) * t
-    const cp1y = p1.y + (p2.y - p0.y) * t
-    const cp2x = p2.x - (p3.x - p1.x) * t
-    const cp2y = p2.y - (p3.y - p1.y) * t
-    d += ` C ${cp1x.toFixed(1)},${cp1y.toFixed(1)} ${cp2x.toFixed(1)},${cp2y.toFixed(1)} ${p2.x.toFixed(1)},${p2.y.toFixed(1)}`
-  }
-  return d
-}
-
-function smoothAreaPath(pts, bottomY) {
-  if (pts.length === 0) return ''
-  const line = smoothBezierPath(pts)
-  return `${line} L ${pts[pts.length-1].x.toFixed(1)},${bottomY.toFixed(1)} L ${pts[0].x.toFixed(1)},${bottomY.toFixed(1)} Z`
-}
 
 function MiniSparkline({ values, color, h = 28, w = 88 }) {
   const filtered = (values || []).filter(v => v != null && !isNaN(v))
@@ -137,7 +115,8 @@ function ActivityWave({ sol, scrubIdx, Colors }) {
 }
 
 // ── Screen ────────────────────────────────────────────────────────────────────
-export default function DashboardScreen({ navigation }) {
+export default function DashboardScreen({ pagerRef }) {
+  const navigation = useNavigation()
   const { Colors, preference, setPreference } = useTheme()
   const { homePort, activeStation } = useApp()
   const { buoy }            = useDataLocation()
@@ -188,8 +167,11 @@ export default function DashboardScreen({ navigation }) {
   }
 
   const pan = PanResponder.create({
-    onStartShouldSetPanResponder: () => true,
-    onMoveShouldSetPanResponder:  () => true,
+    onStartShouldSetPanResponder: () => false,
+    onMoveShouldSetPanResponder: (_e, g) =>
+      Math.abs(g.dx) > 6 && Math.abs(g.dx) > Math.abs(g.dy),
+    onMoveShouldSetPanResponderCapture: (_e, g) =>
+      Math.abs(g.dx) > 6 && Math.abs(g.dx) > Math.abs(g.dy),
     onPanResponderGrant: (e) => {
       const i = getIdx(e.nativeEvent.locationX)
       setScrubIdx(i)
@@ -261,8 +243,8 @@ export default function DashboardScreen({ navigation }) {
     themeTxtOn: { color: Colors.doubloonGold, fontWeight: '700' },
 
     cardGrid:      { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 12, gap: Spacing.sm, marginBottom: Spacing.md },
-    dataCard:      { width: '47.5%', backgroundColor: Colors.cardBg, borderRadius: Radius.lg, borderWidth: 0.5, borderColor: Colors.border, borderTopWidth: 3, padding: Spacing.md, gap: 1 },
-    dataCardTeal:  { borderTopColor: Colors.brackishWater },
+    dataCard:      { width: '47.5%', backgroundColor: Colors.cardBg, borderRadius: Radius.lg, borderTopWidth: 3, borderBottomWidth: 0.5, borderLeftWidth: 0.5, borderRightWidth: 0.5, borderBottomColor: Colors.border, borderLeftColor: Colors.border, borderRightColor: Colors.border, padding: Spacing.md, gap: 1 },
+    dataCardTeal:  { borderTopColor: '#4A8FA8' },
     dataCardGold:  { borderTopColor: Colors.doubloonGold },
     dataCardGreen: { borderTopColor: Colors.marshGreen },
     dataCardNavy:  { borderTopColor: '#0D2137' },
@@ -274,6 +256,11 @@ export default function DashboardScreen({ navigation }) {
     chartHd:    { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
     chartTitle: { fontSize: Typography.xs, color: Colors.textSecondary, fontWeight: '500', letterSpacing: 0.5 },
     chartScore: { fontSize: Typography.sm, fontWeight: '700' },
+
+    utilityGrid: { flexDirection: 'row', paddingHorizontal: 12, gap: Spacing.sm, marginBottom: Spacing.md },
+    utilityCard: { flex: 1, backgroundColor: Colors.cardBg, borderRadius: Radius.lg, borderWidth: 0.5, borderColor: Colors.border, padding: Spacing.md, alignItems: 'center', gap: 4 },
+    utilityIcon: { fontSize: 22 },
+    utilityLabel:{ fontSize: Typography.xs, fontWeight: '600', color: Colors.textSecondary, letterSpacing: 0.5 },
   }), [Colors])
 
   return (
@@ -323,17 +310,17 @@ export default function DashboardScreen({ navigation }) {
         ))}
       </View>
 
-      {/* DATA CARDS 2×3 */}
+      {/* CONDITION DATA CARDS 2×3 */}
       <View style={s.cardGrid}>
         {/* Row 1 */}
-        <TouchableOpacity style={[s.dataCard, s.dataCardTeal]} onPress={() => navigation.navigate('Tides')} activeOpacity={0.8}>
+        <TouchableOpacity style={[s.dataCard, s.dataCardTeal]} onPress={() => pagerRef?.current?.setPage(1)} activeOpacity={0.8}>
           <Text style={s.dataCardLabel}>TIDES</Text>
           <Text style={[s.dataCardVal, { color: Colors.brackishWater }]}>{curTide !== null ? `${curTide.toFixed(2)} ft` : '—'}</Text>
           <Text style={s.dataCardSub}>{curTide !== null ? (tideRising ? 'Incoming ↑' : 'Outgoing ↓') : 'Loading…'}</Text>
           <MiniSparkline values={tideSpark} color={Colors.brackishWater}/>
         </TouchableOpacity>
 
-        <TouchableOpacity style={[s.dataCard, s.dataCardGold]} onPress={() => navigation.navigate('Solunar')} activeOpacity={0.8}>
+        <TouchableOpacity style={[s.dataCard, s.dataCardGold]} onPress={() => pagerRef?.current?.setPage(2)} activeOpacity={0.8}>
           <Text style={s.dataCardLabel}>SOLUNAR</Text>
           <Text style={[s.dataCardVal, { color: scoreColor(actScore) }]}>{actScore}/100</Text>
           <Text style={[s.dataCardSub, { color: scoreColor(actScore) }]}>{scoreLabel(actScore)}</Text>
@@ -341,7 +328,7 @@ export default function DashboardScreen({ navigation }) {
         </TouchableOpacity>
 
         {/* Row 2 */}
-        <TouchableOpacity style={[s.dataCard, s.dataCardTeal]} onPress={() => navigation.navigate('Weather')} activeOpacity={0.8}>
+        <TouchableOpacity style={[s.dataCard, s.dataCardTeal]} onPress={() => pagerRef?.current?.setPage(3)} activeOpacity={0.8}>
           <Text style={s.dataCardLabel}>WIND</Text>
           <Text style={[s.dataCardVal, { color: windSpd !== null ? getWindColor(windSpd) : Colors.brackishWater }]}>{windSpd !== null ? `${windSpd} mph` : '—'}</Text>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 6 }}>
@@ -353,7 +340,7 @@ export default function DashboardScreen({ navigation }) {
           <MiniSparkline values={windSpark} color={windSpd !== null ? getWindColor(windSpd) : Colors.brackishWater}/>
         </TouchableOpacity>
 
-        <TouchableOpacity style={[s.dataCard, s.dataCardNavy]} onPress={() => navigation.navigate('Waves')} activeOpacity={0.8}>
+        <TouchableOpacity style={[s.dataCard, s.dataCardTeal]} onPress={() => pagerRef?.current?.setPage(4)} activeOpacity={0.8}>
           <Text style={s.dataCardLabel}>WAVES</Text>
           <Text style={[s.dataCardVal, { color: Colors.brackishWater }]}>{waveHt !== null ? `${waveHt} ft` : '—'}</Text>
           <Text style={s.dataCardSub}>{waveHt !== null ? `${waveDirStr} swell` : 'Loading…'}</Text>
@@ -361,14 +348,14 @@ export default function DashboardScreen({ navigation }) {
         </TouchableOpacity>
 
         {/* Row 3 */}
-        <TouchableOpacity style={[s.dataCard, s.dataCardGreen]} onPress={() => navigation.navigate('Weather')} activeOpacity={0.8}>
+        <TouchableOpacity style={[s.dataCard, s.dataCardGreen]} onPress={() => pagerRef?.current?.setPage(5)} activeOpacity={0.8}>
           <Text style={s.dataCardLabel}>AIR TEMP</Text>
           <Text style={[s.dataCardVal, { color: Colors.marshGreen }]}>{airTemp !== null ? `${airTemp}°F` : '—'}</Text>
           <Text style={s.dataCardSub}>{todayHigh != null && todayLow != null ? `H ${Math.round(todayHigh)}° · L ${Math.round(todayLow)}°` : 'Loading…'}</Text>
           <MiniSparkline values={tempSpark} color={Colors.marshGreen}/>
         </TouchableOpacity>
 
-        <TouchableOpacity style={[s.dataCard, s.dataCardTeal]} activeOpacity={0.8}>
+        <TouchableOpacity style={[s.dataCard, s.dataCardTeal]} onPress={() => pagerRef?.current?.setPage(5)} activeOpacity={0.8}>
           <Text style={s.dataCardLabel}>WATER TEMP</Text>
           <Text style={[s.dataCardVal, { color: Colors.brackishWater }]}>{waterTemp !== null ? `${Math.round(waterTemp)}°F` : '—'}</Text>
           <Text style={s.dataCardSub}>Surface · NOAA</Text>
@@ -383,9 +370,31 @@ export default function DashboardScreen({ navigation }) {
             {displayScore} · {displayLabel}
           </Text>
         </View>
-        <View {...pan.panHandlers}>
+        <View
+          onTouchStart={(e) => {
+            const i = getIdx(e.nativeEvent.locationX)
+            setScrubIdx(i)
+          }}
+          {...pan.panHandlers}
+        >
           <ActivityWave sol={sol} scrubIdx={scrubIdx} Colors={Colors}/>
         </View>
+      </View>
+
+      {/* UTILITY TILES */}
+      <View style={s.utilityGrid}>
+        <TouchableOpacity style={s.utilityCard} onPress={() => navigation.navigate('Map')} activeOpacity={0.8}>
+          <Text style={s.utilityIcon}>◎</Text>
+          <Text style={s.utilityLabel}>MAP</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={s.utilityCard} onPress={() => navigation.navigate('CaptainsLog')} activeOpacity={0.8}>
+          <Text style={s.utilityIcon}>📖</Text>
+          <Text style={s.utilityLabel}>LOGBOOK</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={s.utilityCard} onPress={() => navigation.navigate('Shop')} activeOpacity={0.8}>
+          <Text style={s.utilityIcon}>⊕</Text>
+          <Text style={s.utilityLabel}>SHOP</Text>
+        </TouchableOpacity>
       </View>
 
       <HomePortPicker visible={showPicker} onClose={() => setShowPicker(false)}/>

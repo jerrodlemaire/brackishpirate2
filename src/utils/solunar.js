@@ -92,6 +92,30 @@ export function scoreLabel(score) {
   return 'Slow'
 }
 
+export function getMoonEmoji(phase) {
+  if (phase < 0.0625) return '🌑'
+  if (phase < 0.1875) return '🌒'
+  if (phase < 0.3125) return '🌓'
+  if (phase < 0.4375) return '🌔'
+  if (phase < 0.5625) return '🌕'
+  if (phase < 0.6875) return '🌖'
+  if (phase < 0.8125) return '🌗'
+  if (phase < 0.9375) return '🌘'
+  return '🌑'
+}
+
+export function getMoonPhaseName(phase) {
+  if (phase < 0.0625) return 'New Moon'
+  if (phase < 0.1875) return 'Waxing Crescent'
+  if (phase < 0.3125) return 'First Quarter'
+  if (phase < 0.4375) return 'Waxing Gibbous'
+  if (phase < 0.5625) return 'Full Moon'
+  if (phase < 0.6875) return 'Waning Gibbous'
+  if (phase < 0.8125) return 'Last Quarter'
+  if (phase < 0.9375) return 'Waning Crescent'
+  return 'New Moon'
+}
+
 export function getSunTimes(lat = 30.18, lngDeg = 90.11) {
   const now = new Date()
   const day = Math.floor((now - new Date(now.getFullYear(), 0, 0)) / 86400000)

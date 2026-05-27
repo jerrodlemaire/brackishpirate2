@@ -4,18 +4,17 @@ import {
   Dimensions, PanResponder,
 } from 'react-native'
 import Svg, { Path, Circle, Defs, LinearGradient, Stop } from 'react-native-svg'
-import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import * as Haptics from 'expo-haptics'
 import { Typography, Spacing, Radius } from '../../constants/theme'
 import { useTheme } from '../../hooks/useTheme'
 import {
   getSolunarForDate, buildActivityCurve,
-  scoreColor, scoreLabel, getSunTimes,
+  scoreColor, scoreLabel, getSunTimes, getMoonEmoji,
 } from '../../utils/solunar'
 import { useDataLocation } from '../../hooks/useDataLocation'
+import { smoothBezierPath, smoothAreaPath } from '../../utils/chart'
 import LocationChip from '../../components/LocationChip'
 import LocationPickerModal from '../../components/LocationPickerModal'
-import ForecastBubble from '../../components/ForecastBubble'
 
 const { width } = Dimensions.get('window')
 const CHART_W = width - 32
@@ -33,31 +32,6 @@ function addDays(date, n) {
   return d
 }
 function isSameDay(a, b) { return a.toDateString() === b.toDateString() }
-
-// ── Bezier helpers ────────────────────────────────────────────────────────────
-function smoothBezierPath(pts) {
-  if (pts.length < 2) return ''
-  const t = 0.35
-  let d = `M ${pts[0].x.toFixed(1)},${pts[0].y.toFixed(1)}`
-  for (let i = 0; i < pts.length - 1; i++) {
-    const p0 = pts[Math.max(0, i - 1)]
-    const p1 = pts[i]
-    const p2 = pts[i + 1]
-    const p3 = pts[Math.min(pts.length - 1, i + 2)]
-    const cp1x = p1.x + (p2.x - p0.x) * t
-    const cp1y = p1.y + (p2.y - p0.y) * t
-    const cp2x = p2.x - (p3.x - p1.x) * t
-    const cp2y = p2.y - (p3.y - p1.y) * t
-    d += ` C ${cp1x.toFixed(1)},${cp1y.toFixed(1)} ${cp2x.toFixed(1)},${cp2y.toFixed(1)} ${p2.x.toFixed(1)},${p2.y.toFixed(1)}`
-  }
-  return d
-}
-
-function smoothAreaPath(pts, bottomY) {
-  if (pts.length === 0) return ''
-  const line = smoothBezierPath(pts)
-  return `${line} L ${pts[pts.length-1].x.toFixed(1)},${bottomY.toFixed(1)} L ${pts[0].x.toFixed(1)},${bottomY.toFixed(1)} Z`
-}
 
 // ── Solunar chart ─────────────────────────────────────────────────────────────
 function SolunarChart({ sol }) {
@@ -82,8 +56,11 @@ function SolunarChart({ sol }) {
 
   if (!panRef.current) {
     panRef.current = PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder:  () => true,
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (_e, g) =>
+        Math.abs(g.dx) > 6 && Math.abs(g.dx) > Math.abs(g.dy),
+      onMoveShouldSetPanResponderCapture: (_e, g) =>
+        Math.abs(g.dx) > 6 && Math.abs(g.dx) > Math.abs(g.dy),
       onPanResponderGrant: (e) => {
         const i = getIdxFn.current?.(e.nativeEvent.locationX)
         if (i == null) return
@@ -126,7 +103,14 @@ function SolunarChart({ sol }) {
   ]
 
   return (
-    <View style={gc.wrap} {...pan.panHandlers}>
+    <View
+      style={gc.wrap}
+      onTouchStart={(e) => {
+        const i = getIdxFn.current?.(e.nativeEvent.locationX)
+        if (i != null) setScrubIdx(i)
+      }}
+      {...pan.panHandlers}
+    >
       <Svg width={CHART_W} height={CHART_H} style={StyleSheet.absoluteFillObject}>
         <Defs>
           <LinearGradient id="solGrad" x1="0" y1="0" x2="0" y2="1">
@@ -264,9 +248,8 @@ function DayStrip({ selectedDate, onSelect }) {
 }
 
 // ── Screen ────────────────────────────────────────────────────────────────────
-export default function SolunarScreen({ navigation }) {
+export default function SolunarScreen() {
   const { Colors } = useTheme()
-  const insets = useSafeAreaInsets()
   const { solunarLocation, setSolunarLocation } = useDataLocation()
   const [selectedDate,       setSelectedDate]       = useState(new Date())
   const [showLocationPicker, setShowLocationPicker] = useState(false)
@@ -294,6 +277,7 @@ export default function SolunarScreen({ navigation }) {
     heroScore:      { fontSize: 32, fontWeight: '700', fontFamily: 'Georgia', lineHeight: 36 },
     heroScoreDenom: { fontSize: Typography.sm, color: Colors.textSecondary, marginBottom: 4 },
     heroScoreLabel: { fontSize: Typography.sm, color: Colors.textPrimary, marginTop: 3, marginBottom: 8 },
+    heroMoonPhase:  { fontSize: Typography.sm, color: Colors.doubloonGold, fontWeight: '500', marginTop: 1 },
     scoreBar:       { height: 4, backgroundColor: Colors.border, borderRadius: 2, overflow: 'hidden' },
     scoreBarFill:   { height: '100%', borderRadius: 2 },
     heroRight:      { gap: 8, alignItems: 'flex-end', marginLeft: 12 },
@@ -339,10 +323,7 @@ export default function SolunarScreen({ navigation }) {
     <View style={s.container}>
 
       {/* TOPBAR */}
-      <View style={[s.topbar, { paddingTop: insets.top + 10 }]}>
-        <TouchableOpacity onPress={() => navigation.navigate('Dashboard')} style={s.topbarBack}>
-          <Text style={s.topbarBackTxt}>‹</Text>
-        </TouchableOpacity>
+      <View style={[s.topbar, { paddingTop: 10 }]}>
         <Text style={s.topbarTitle}>Solunar</Text>
         <LocationChip
           label={solunarLocation.name}
@@ -366,6 +347,7 @@ export default function SolunarScreen({ navigation }) {
               <Text style={[s.heroScore, { color }]}>{score}</Text>
               <Text style={s.heroScoreDenom}>/100</Text>
             </View>
+            <Text style={s.heroMoonPhase}>{sol.moonPhase.name}</Text>
             <Text style={s.heroScoreLabel}>{label} fishing conditions</Text>
             <View style={s.scoreBar}>
               <View style={[s.scoreBarFill, { width: `${score}%`, backgroundColor: color }]}/>
@@ -392,18 +374,20 @@ export default function SolunarScreen({ navigation }) {
           <SolunarChart sol={sol}/>
         </View>
 
-        {/* Moon card */}
-        <View style={s.moonCard}>
-          <Text style={s.moonEmoji}>{sol.moonPhase.emoji}</Text>
-          <View style={s.moonInfo}>
-            <Text style={s.moonName}>{sol.moonPhase.name}</Text>
-            <Text style={s.moonSub}>{sol.illumination}% illuminated</Text>
-            <Text style={s.moonDays}>
-              {sol.daysToFull === 0
-                ? '🔥 Full moon tonight — peak conditions'
-                : `Full moon in ${sol.daysToFull} day${sol.daysToFull === 1 ? '' : 's'}`}
-            </Text>
-          </View>
+        {/* Best times — moved directly below chart */}
+        <View style={s.card}>
+          <Text style={s.cardTitle}>Best fishing windows today</Text>
+          {[
+            { label: '🌅 Dawn bite',     detail: `First light to 2 hr after ${sun.sunrise}` },
+            { label: '🌟 Major solunar', detail: `${sol.major1.start} – ${sol.major1.end}` },
+            { label: '🌟 Evening major', detail: `${sol.major2.start} – ${sol.major2.end}` },
+            { label: '🌇 Dusk bite',     detail: `2 hr before ${sun.sunset}` },
+          ].map((b, i) => (
+            <View key={i} style={s.bestRow}>
+              <Text style={s.bestLabel}>{b.label}</Text>
+              <Text style={s.bestDetail}>{b.detail}</Text>
+            </View>
+          ))}
         </View>
 
         {/* Feeding windows */}
@@ -431,28 +415,12 @@ export default function SolunarScreen({ navigation }) {
           {[
             { icon: '🌅', label: 'Sunrise',     val: sun.sunrise },
             { icon: '🌇', label: 'Sunset',       val: sun.sunset },
-            { icon: '🌕', label: 'Illumination', val: `${sol.illumination}%` },
+            { icon: getMoonEmoji(sol.phase), label: 'Illumination', val: `${sol.illumination}%` },
           ].map((c, i) => (
             <View key={i} style={s.sunCard}>
               <Text style={s.sunIcon}>{c.icon}</Text>
               <Text style={s.sunLabel}>{c.label}</Text>
               <Text style={s.sunVal}>{c.val}</Text>
-            </View>
-          ))}
-        </View>
-
-        {/* Best times */}
-        <View style={s.card}>
-          <Text style={s.cardTitle}>Best fishing windows today</Text>
-          {[
-            { label: '🌅 Dawn bite',     detail: `First light to 2 hr after ${sun.sunrise}` },
-            { label: '🌟 Major solunar', detail: `${sol.major1.start} – ${sol.major1.end}` },
-            { label: '🌟 Evening major', detail: `${sol.major2.start} – ${sol.major2.end}` },
-            { label: '🌇 Dusk bite',     detail: `2 hr before ${sun.sunset}` },
-          ].map((b, i) => (
-            <View key={i} style={s.bestRow}>
-              <Text style={s.bestLabel}>{b.label}</Text>
-              <Text style={s.bestDetail}>{b.detail}</Text>
             </View>
           ))}
         </View>
@@ -478,7 +446,6 @@ export default function SolunarScreen({ navigation }) {
         initialLng={solunarLocation.lng}
       />
 
-      <ForecastBubble navigation={navigation} activeRoute="Solunar"/>
     </View>
   )
 }

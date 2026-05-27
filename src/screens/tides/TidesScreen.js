@@ -4,16 +4,15 @@ import {
   ActivityIndicator, RefreshControl, Dimensions, PanResponder,
 } from 'react-native'
 import Svg, { Path, Circle, Defs, LinearGradient, Stop } from 'react-native-svg'
-import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import * as Haptics from 'expo-haptics'
 import { Typography, Spacing, Radius } from '../../constants/theme'
 import { useTheme } from '../../hooks/useTheme'
 import { fetchTideHourly, fetchTideHiLo } from '../../utils/tides'
 import { getSolunarForDate, scoreColor } from '../../utils/solunar'
 import { useDataLocation } from '../../hooks/useDataLocation'
+import { smoothBezierPath, smoothAreaPath } from '../../utils/chart'
 import LocationChip from '../../components/LocationChip'
 import TideStationPickerModal from '../../components/TideStationPickerModal'
-import ForecastBubble from '../../components/ForecastBubble'
 
 const { width } = Dimensions.get('window')
 const CHART_W = width - 32
@@ -32,31 +31,6 @@ function addDays(date, n) {
 }
 function isSameDay(a, b) { return a.toDateString() === b.toDateString() }
 
-// ── Bezier helpers ────────────────────────────────────────────────────────────
-function smoothBezierPath(pts) {
-  if (pts.length < 2) return ''
-  const t = 0.35
-  let d = `M ${pts[0].x.toFixed(1)},${pts[0].y.toFixed(1)}`
-  for (let i = 0; i < pts.length - 1; i++) {
-    const p0 = pts[Math.max(0, i - 1)]
-    const p1 = pts[i]
-    const p2 = pts[i + 1]
-    const p3 = pts[Math.min(pts.length - 1, i + 2)]
-    const cp1x = p1.x + (p2.x - p0.x) * t
-    const cp1y = p1.y + (p2.y - p0.y) * t
-    const cp2x = p2.x - (p3.x - p1.x) * t
-    const cp2y = p2.y - (p3.y - p1.y) * t
-    d += ` C ${cp1x.toFixed(1)},${cp1y.toFixed(1)} ${cp2x.toFixed(1)},${cp2y.toFixed(1)} ${p2.x.toFixed(1)},${p2.y.toFixed(1)}`
-  }
-  return d
-}
-
-function smoothAreaPath(pts, bottomY) {
-  if (pts.length === 0) return ''
-  const line = smoothBezierPath(pts)
-  return `${line} L ${pts[pts.length-1].x.toFixed(1)},${bottomY.toFixed(1)} L ${pts[0].x.toFixed(1)},${bottomY.toFixed(1)} Z`
-}
-
 // ── Tide chart ────────────────────────────────────────────────────────────────
 function TideChart({ hourlyData }) {
   const { Colors }  = useTheme()
@@ -68,7 +42,7 @@ function TideChart({ hourlyData }) {
   const stepXRef   = useRef(1)
 
   const tc = useMemo(() => StyleSheet.create({
-    wrap:      { height: CHART_H, width: CHART_W, position: 'relative', marginBottom: 4 },
+    wrap:      { height: CHART_H, width: CHART_W, position: 'relative', marginBottom: 4, overflow: 'hidden' },
     gridLbl:   { position: 'absolute', left: 0, width: PAD_L - 4, textAlign: 'right', fontSize: 11, fontWeight: 'bold', color: Colors.textMuted },
     nowLine:   { position: 'absolute', top: PAD_T, bottom: PAD_B, width: 1.5, backgroundColor: Colors.doubloonGold },
     scrubLine: { position: 'absolute', top: PAD_T, bottom: PAD_B, width: 1.5, backgroundColor: Colors.brackishWater, opacity: 0.8 },
@@ -80,8 +54,11 @@ function TideChart({ hourlyData }) {
 
   if (!panRef.current) {
     panRef.current = PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder:  () => true,
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (_e, g) =>
+        Math.abs(g.dx) > 6 && Math.abs(g.dx) > Math.abs(g.dy),
+      onMoveShouldSetPanResponderCapture: (_e, g) =>
+        Math.abs(g.dx) > 6 && Math.abs(g.dx) > Math.abs(g.dy),
       onPanResponderGrant: (e) => {
         const i = getIdxFn.current?.(e.nativeEvent.locationX)
         if (i == null) return
@@ -138,7 +115,14 @@ function TideChart({ hourlyData }) {
   const gridVals = [minVal, minVal + range * 0.25, minVal + range * 0.5, minVal + range * 0.75, maxVal]
 
   return (
-    <View style={tc.wrap} {...pan.panHandlers}>
+    <View
+      style={tc.wrap}
+      onTouchStart={(e) => {
+        const i = getIdxFn.current?.(e.nativeEvent.locationX)
+        if (i != null) setScrubIdx(i)
+      }}
+      {...pan.panHandlers}
+    >
       <Svg width={CHART_W} height={CHART_H} style={StyleSheet.absoluteFillObject}>
         <Defs>
           <LinearGradient id="tideGrad" x1="0" y1="0" x2="0" y2="1">
@@ -272,9 +256,8 @@ function DayStrip({ selectedDate, onSelect }) {
 }
 
 // ── Screen ────────────────────────────────────────────────────────────────────
-export default function TidesScreen({ navigation }) {
+export default function TidesScreen() {
   const { Colors }  = useTheme()
-  const insets = useSafeAreaInsets()
   const { tideStation, setTideStation } = useDataLocation()
   const [selectedDate,      setSelectedDate]      = useState(new Date())
   const [hourly,            setHourly]            = useState([])
@@ -350,8 +333,8 @@ export default function TidesScreen({ navigation }) {
     hiLoVal:   { fontSize: Typography.xl, fontWeight: '700', color: Colors.textPrimary },
     hiLoTime:  { fontSize: Typography.sm, color: Colors.textSecondary },
 
-    infoRow:   { flexDirection: 'row', gap: 8 },
-    infoCard:  { flex: 1, backgroundColor: Colors.cardBg, borderRadius: Radius.md, borderWidth: 0.5, borderColor: Colors.border, padding: 12, alignItems: 'center', gap: 4 },
+    infoRow:   { flexDirection: 'row', gap: 12, justifyContent: 'center' },
+    infoCard:  { width: '45%', backgroundColor: Colors.cardBg, borderRadius: Radius.md, borderWidth: 0.5, borderColor: Colors.border, padding: 12, alignItems: 'center', gap: 4 },
     infoIcon:  { fontSize: 18 },
     infoLabel: { fontSize: Typography.xs, color: Colors.textSecondary, textAlign: 'center' },
     infoVal:   { fontSize: Typography.sm, fontWeight: '500', color: Colors.textPrimary, textAlign: 'center' },
@@ -366,10 +349,7 @@ export default function TidesScreen({ navigation }) {
     <View style={s.container}>
 
       {/* TOPBAR */}
-      <View style={[s.topbar, { paddingTop: insets.top + 10 }]}>
-        <TouchableOpacity onPress={() => navigation.navigate('Dashboard')} style={s.topbarBack}>
-          <Text style={s.topbarBackTxt}>‹</Text>
-        </TouchableOpacity>
+      <View style={[s.topbar, { paddingTop: 10 }]}>
         <Text style={s.topbarTitle}>Tides</Text>
         <LocationChip
           label={tideStation.name}
@@ -409,9 +389,9 @@ export default function TidesScreen({ navigation }) {
         </View>
 
         {/* Chart */}
-        <View style={s.card}>
-          <Text style={s.cardTitle}>Today's tide chart</Text>
-          <Text style={s.cardSub}>24-hour tide chart · {tideStation.name}</Text>
+        <View style={[s.card, { paddingHorizontal: 0, overflow: 'hidden' }]}>
+          <Text style={[s.cardTitle, { paddingHorizontal: Spacing.lg }]}>Today's tide chart</Text>
+          <Text style={[s.cardSub, { paddingHorizontal: Spacing.lg }]}>24-hour tide chart · {tideStation.name}</Text>
           {loading
             ? <View style={{ height: CHART_H, alignItems: 'center', justifyContent: 'center' }}>
                 <ActivityIndicator color={Colors.brackishWater}/>
@@ -443,7 +423,6 @@ export default function TidesScreen({ navigation }) {
           {[
             { icon: '🌊', label: 'Tidal range', val: hiLo.length >= 2 ? `${Math.abs(parseFloat(hiLo[0].v) - parseFloat(hiLo[1].v)).toFixed(2)} ft` : '—' },
             { icon: '📍', label: 'Station', val: tideStation.name },
-            { icon: '📐', label: 'Datum', val: 'MLLW' },
           ].map((c, i) => (
             <View key={i} style={s.infoCard}>
               <Text style={s.infoIcon}>{c.icon}</Text>
@@ -477,7 +456,6 @@ export default function TidesScreen({ navigation }) {
         currentStationId={tideStation.id}
       />
 
-      <ForecastBubble navigation={navigation} activeRoute="Tides"/>
     </View>
   )
 }

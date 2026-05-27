@@ -4,12 +4,11 @@ import {
   ActivityIndicator, RefreshControl, Dimensions, PanResponder,
 } from 'react-native'
 import Svg, { Path, Defs, LinearGradient, Stop } from 'react-native-svg'
-import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Typography, Spacing, Radius } from '../../constants/theme'
 import { useTheme } from '../../hooks/useTheme'
 import { fetchNearbyRiverStations, fetchRiverTimeSeries, formatStage, formatFlow } from '../../utils/river'
+import { smoothBezierPath, smoothAreaPath } from '../../utils/chart'
 import { useApp } from '../../context/AppContext'
-import ForecastBubble from '../../components/ForecastBubble'
 
 const { width } = Dimensions.get('window')
 const CHART_W = width - 32
@@ -26,27 +25,6 @@ const RANGES = [
   { key: 'P7D',  label: '7 day'   },
   { key: 'P30D', label: '1 month' },
 ]
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-function smoothBezierPath(pts) {
-  if (pts.length < 2) return ''
-  const t = 0.3
-  let d = `M ${pts[0].x.toFixed(1)},${pts[0].y.toFixed(1)}`
-  for (let i = 0; i < pts.length - 1; i++) {
-    const p0 = pts[Math.max(0, i - 1)], p1 = pts[i]
-    const p2 = pts[i + 1], p3 = pts[Math.min(pts.length - 1, i + 2)]
-    const cp1x = p1.x + (p2.x - p0.x) * t, cp1y = p1.y + (p2.y - p0.y) * t
-    const cp2x = p2.x - (p3.x - p1.x) * t, cp2y = p2.y - (p3.y - p1.y) * t
-    d += ` C ${cp1x.toFixed(1)},${cp1y.toFixed(1)} ${cp2x.toFixed(1)},${cp2y.toFixed(1)} ${p2.x.toFixed(1)},${p2.y.toFixed(1)}`
-  }
-  return d
-}
-
-function smoothAreaPath(pts, bottomY) {
-  if (!pts.length) return ''
-  const line = smoothBezierPath(pts)
-  return `${line} L ${pts[pts.length-1].x.toFixed(1)},${bottomY.toFixed(1)} L ${pts[0].x.toFixed(1)},${bottomY.toFixed(1)} Z`
-}
 
 function getXLabels(series, range) {
   if (!series.length) return []
@@ -104,8 +82,11 @@ function RiverChart({ series, metric, range }) {
 
   if (!panRef.current) {
     panRef.current = PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder:  () => true,
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (_e, g) =>
+        Math.abs(g.dx) > 6 && Math.abs(g.dx) > Math.abs(g.dy),
+      onMoveShouldSetPanResponderCapture: (_e, g) =>
+        Math.abs(g.dx) > 6 && Math.abs(g.dx) > Math.abs(g.dy),
       onPanResponderGrant: e => { const i = getIdxFn.current?.(e.nativeEvent.locationX); if (i != null) setScrubIdx(i) },
       onPanResponderMove:  e => { const i = getIdxFn.current?.(e.nativeEvent.locationX); if (i != null) setScrubIdx(i) },
       onPanResponderRelease: () => setTimeout(() => setScrubIdx(null), 2500),
@@ -153,7 +134,14 @@ function RiverChart({ series, metric, range }) {
     : null
 
   return (
-    <View style={ch.wrap} {...panRef.current.panHandlers}>
+    <View
+      style={ch.wrap}
+      onTouchStart={(e) => {
+        const i = getIdxFn.current?.(e.nativeEvent.locationX)
+        if (i != null) setScrubIdx(i)
+      }}
+      {...panRef.current.panHandlers}
+    >
       <Svg width={CHART_W} height={CHART_H} style={StyleSheet.absoluteFillObject}>
         <Defs>
           <LinearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
@@ -211,7 +199,7 @@ function RiverChart({ series, metric, range }) {
 }
 
 // ── Station strip ─────────────────────────────────────────────────────────────
-function StationStrip({ stations, selectedId, favorites, onSelect, onToggleFav }) {
+function StationStrip({ stations, selectedId, favorites, onSelect }) {
   const { Colors } = useTheme()
 
   const ss = useMemo(() => StyleSheet.create({
@@ -219,11 +207,8 @@ function StationStrip({ stations, selectedId, favorites, onSelect, onToggleFav }
     content:  { paddingHorizontal: 12, paddingVertical: 8, gap: 6 },
     chip:     { width: 110, padding: 8, borderRadius: Radius.md, borderWidth: 0.5, borderColor: 'rgba(255,255,255,0.12)', backgroundColor: 'rgba(255,255,255,0.04)', gap: 3 },
     chipSel:  { backgroundColor: `${Colors.brackishWater}40`, borderColor: Colors.brackishWater },
-    chipRow:  { flexDirection: 'row', alignItems: 'flex-start', gap: 4 },
-    name:     { flex: 1, fontSize: 9, color: 'rgba(255,255,255,0.6)', fontWeight: '500', lineHeight: 13 },
+    name:     { fontSize: 9, color: 'rgba(255,255,255,0.6)', fontWeight: '500', lineHeight: 13 },
     nameSel:  { color: '#fff' },
-    star:     { fontSize: 13, color: 'rgba(255,255,255,0.35)', lineHeight: 15 },
-    starOn:   { color: Colors.doubloonGold },
     stage:    { fontSize: Typography.sm, fontWeight: '700', color: '#fff' },
     stageSel: { color: Colors.brackishWater },
     dist:     { fontSize: 9, color: 'rgba(255,255,255,0.35)' },
@@ -244,12 +229,7 @@ function StationStrip({ stations, selectedId, favorites, onSelect, onToggleFav }
           <TouchableOpacity key={st.id}
             style={[ss.chip, selected && ss.chipSel]}
             onPress={() => onSelect(st)}>
-            <View style={ss.chipRow}>
-              <Text style={[ss.name, selected && ss.nameSel]} numberOfLines={2}>{st.name}</Text>
-              <TouchableOpacity onPress={() => onToggleFav(st.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                <Text style={[ss.star, fav && ss.starOn]}>{fav ? '★' : '☆'}</Text>
-              </TouchableOpacity>
-            </View>
+            <Text style={[ss.name, selected && ss.nameSel]} numberOfLines={1} ellipsizeMode="tail" adjustsFontSizeToFit minimumFontScale={0.7}>{st.name}</Text>
             <Text style={[ss.stage, selected && ss.stageSel]}>{formatStage(st.stage)}</Text>
             <Text style={ss.dist}>{st.distance.toFixed(1)} mi</Text>
           </TouchableOpacity>
@@ -260,9 +240,8 @@ function StationStrip({ stations, selectedId, favorites, onSelect, onToggleFav }
 }
 
 // ── Screen ────────────────────────────────────────────────────────────────────
-export default function RiverScreen({ navigation }) {
+export default function RiverScreen() {
   const { Colors } = useTheme()
-  const insets = useSafeAreaInsets()
   const { homePort, riverFavorites, toggleRiverFavorite } = useApp()
 
   const [stations,        setStations]        = useState([])
@@ -377,12 +356,8 @@ export default function RiverScreen({ navigation }) {
     <View style={s.container}>
 
       {/* Topbar */}
-      <View style={[s.topbar, { paddingTop: insets.top + 10 }]}>
-        <TouchableOpacity onPress={() => navigation?.navigate('Dashboard')} style={s.backBtn}>
-          <Text style={s.backTxt}>‹</Text>
-        </TouchableOpacity>
+      <View style={[s.topbar, { paddingTop: 10 }]}>
         <Text style={s.title}>River Gauges</Text>
-        <View style={{ width: 32 }}/>
       </View>
 
       {/* Station strip */}
@@ -401,7 +376,6 @@ export default function RiverScreen({ navigation }) {
           selectedId={selectedStation?.id}
           favorites={riverFavorites}
           onSelect={selectStation}
-          onToggleFav={toggleRiverFavorite}
         />
       )}
 
@@ -478,7 +452,6 @@ export default function RiverScreen({ navigation }) {
         <View style={{ height: 100 }}/>
       </ScrollView>
 
-      <ForecastBubble navigation={navigation} activeRoute="River"/>
     </View>
   )
 }

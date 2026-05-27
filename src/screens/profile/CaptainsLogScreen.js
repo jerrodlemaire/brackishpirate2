@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react'
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   RefreshControl, ActivityIndicator, Image, Modal, Switch,
+  TextInput, KeyboardAvoidingView, Platform,
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Typography, Spacing, Radius } from '../../constants/theme'
@@ -11,6 +12,7 @@ import { useAuth } from '../../hooks/useAuth'
 import { useApp } from '../../context/AppContext'
 import { useDataLocation } from '../../hooks/useDataLocation'
 import HomePortPicker from '../../components/HomePortPicker'
+import HomePortChip from '../../components/HomePortChip'
 import SubmitReportScreen from '../reports/SubmitReportScreen'
 
 const SPECIES_FILTERS = ['All', 'Speckled Trout', 'Redfish', 'Flounder', 'Sheepshead', 'Black Drum', 'Cobia', 'Tarpon']
@@ -201,9 +203,44 @@ function ProfileSection({ user }) {
   const { Colors } = useTheme()
   const { homePort }                                                   = useApp()
   const { tideStation, buoy, weatherLocation, solunarLocation }       = useDataLocation()
-  const [showHomePort, setShowHomePort]                                = useState(false)
-  const [notifBite,    setNotifBite]                                   = useState(false)
-  const [notifTide,    setNotifTide]                                   = useState(false)
+  const [showHomePort,       setShowHomePort]       = useState(false)
+  const [notifBite,          setNotifBite]          = useState(false)
+  const [notifTide,          setNotifTide]          = useState(false)
+  const [showFeedback,       setShowFeedback]       = useState(false)
+  const [feedbackText,       setFeedbackText]       = useState('')
+  const [feedbackCategory,   setFeedbackCategory]   = useState('Feature request')
+  const [feedbackSubmitting, setFeedbackSubmitting] = useState(false)
+  const [feedbackSuccess,    setFeedbackSuccess]    = useState(false)
+  const successTimer = useRef(null)
+
+  const FEEDBACK_CATS = ['Bug report', 'Feature request', 'Design change', 'Other']
+
+  const submitFeedback = useCallback(async () => {
+    if (!feedbackText.trim() || feedbackSubmitting) return
+    setFeedbackSubmitting(true)
+    try {
+      const { error } = await supabase.from('feedback').insert({
+        user_id:     user.id,
+        category:    feedbackCategory,
+        message:     feedbackText.trim(),
+        app_version: '1.0.0',
+      })
+      if (error) throw error
+      setFeedbackSuccess(true)
+      successTimer.current = setTimeout(() => {
+        setShowFeedback(false)
+        setFeedbackText('')
+        setFeedbackCategory('Feature request')
+        setFeedbackSuccess(false)
+        setFeedbackSubmitting(false)
+      }, 2000)
+    } catch (e) {
+      console.log('Feedback submit error:', e)
+      setFeedbackSubmitting(false)
+    }
+  }, [feedbackText, feedbackCategory, feedbackSubmitting, user.id])
+
+  useEffect(() => () => { if (successTimer.current) clearTimeout(successTimer.current) }, [])
 
   const s = useMemo(() => StyleSheet.create({
     content:       { padding: Spacing.lg, gap: Spacing.md, paddingBottom: 32 },
@@ -231,6 +268,24 @@ function ProfileSection({ user }) {
     notifLabel:    { fontSize: Typography.base, color: Colors.textPrimary },
     signOutBtn:    { backgroundColor: 'rgba(226,75,74,0.12)', borderRadius: Radius.md, borderWidth: 0.5, borderColor: 'rgba(226,75,74,0.35)', paddingVertical: 13, alignItems: 'center' },
     signOutTxt:    { fontSize: Typography.base, color: Colors.danger, fontWeight: '600' },
+    feedbackRow:   { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: Colors.cardBg, borderRadius: Radius.lg, borderWidth: 0.5, borderColor: Colors.border, paddingVertical: 14, paddingHorizontal: Spacing.lg },
+    feedbackIcon:  { fontSize: 20 },
+    feedbackLabel: { flex: 1, fontSize: Typography.base, color: Colors.textPrimary, fontWeight: '500' },
+    feedbackChev:  { fontSize: Typography.base, color: Colors.textSecondary },
+    fbOverlay:     { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' },
+    fbSheet:       { backgroundColor: Colors.cardBg, borderTopLeftRadius: Radius.xl, borderTopRightRadius: Radius.xl, padding: Spacing.lg, gap: Spacing.md, paddingBottom: 40 },
+    fbTitle:       { fontSize: Typography.lg, fontWeight: '700', color: Colors.textPrimary, fontFamily: 'Georgia' },
+    fbInput:       { backgroundColor: Colors.inputBg, borderRadius: Radius.md, borderWidth: 0.5, borderColor: Colors.border, padding: 12, fontSize: Typography.base, color: Colors.textPrimary, minHeight: 100, textAlignVertical: 'top' },
+    fbCatRow:      { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+    fbCat:         { paddingHorizontal: 12, paddingVertical: 6, borderRadius: Radius.full, borderWidth: 0.5, borderColor: Colors.border, backgroundColor: Colors.inputBg },
+    fbCatOn:       { backgroundColor: Colors.brackishWater, borderColor: Colors.brackishWater },
+    fbCatTxt:      { fontSize: Typography.sm, color: Colors.textSecondary, fontWeight: '500' },
+    fbCatTxtOn:    { color: '#fff' },
+    fbSubmit:      { backgroundColor: Colors.brackishWater, borderRadius: Radius.md, paddingVertical: 13, alignItems: 'center' },
+    fbSubmitTxt:   { fontSize: Typography.base, fontWeight: '700', color: '#fff', letterSpacing: 0.3 },
+    fbSuccess:     { alignItems: 'center', paddingVertical: Spacing.xl, gap: 12 },
+    fbSuccessEmoji:{ fontSize: 44 },
+    fbSuccessTxt:  { fontSize: Typography.lg, fontWeight: '600', color: Colors.textPrimary, textAlign: 'center' },
   }), [Colors])
 
   const userName     = user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Captain'
@@ -301,11 +356,56 @@ function ProfileSection({ user }) {
         </View>
       </View>
 
+      {/* Send feedback */}
+      <TouchableOpacity style={s.feedbackRow} onPress={() => setShowFeedback(true)} activeOpacity={0.75}>
+        <Text style={s.feedbackIcon}>💬</Text>
+        <Text style={s.feedbackLabel}>Suggest a feature or improvement</Text>
+        <Text style={s.feedbackChev}>›</Text>
+      </TouchableOpacity>
+
       <TouchableOpacity style={s.signOutBtn} onPress={() => supabase.auth.signOut()} activeOpacity={0.8}>
         <Text style={s.signOutTxt}>Sign out</Text>
       </TouchableOpacity>
       <View style={{ height: 40 }}/>
       <HomePortPicker visible={showHomePort} onClose={() => setShowHomePort(false)}/>
+
+      <Modal visible={showFeedback} transparent animationType="slide" onRequestClose={() => setShowFeedback(false)}>
+        <KeyboardAvoidingView style={s.fbOverlay} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+          <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={() => setShowFeedback(false)}/>
+          <View style={s.fbSheet}>
+            {feedbackSuccess ? (
+              <View style={s.fbSuccess}>
+                <Text style={s.fbSuccessEmoji}>🎣</Text>
+                <Text style={s.fbSuccessTxt}>Thanks! We read every suggestion.</Text>
+              </View>
+            ) : (
+              <>
+                <Text style={s.fbTitle}>Share feedback</Text>
+                <TextInput
+                  style={s.fbInput}
+                  placeholder="Describe your idea or the change you'd like to see..."
+                  placeholderTextColor={Colors.textMuted}
+                  value={feedbackText}
+                  onChangeText={setFeedbackText}
+                  multiline
+                  maxLength={1000}
+                />
+                <View style={s.fbCatRow}>
+                  {FEEDBACK_CATS.map(cat => (
+                    <TouchableOpacity key={cat} style={[s.fbCat, feedbackCategory === cat && s.fbCatOn]} onPress={() => setFeedbackCategory(cat)}>
+                      <Text style={[s.fbCatTxt, feedbackCategory === cat && s.fbCatTxtOn]}>{cat}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+                <TouchableOpacity style={[s.fbSubmit, (!feedbackText.trim() || feedbackSubmitting) && { opacity: 0.5 }]}
+                  onPress={submitFeedback} activeOpacity={0.85} disabled={!feedbackText.trim() || feedbackSubmitting}>
+                  <Text style={s.fbSubmitTxt}>{feedbackSubmitting ? 'Sending…' : 'Submit'}</Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </ScrollView>
   )
 }
@@ -318,8 +418,8 @@ export default function CaptainsLogScreen() {
 
   const s = useMemo(() => StyleSheet.create({
     container: { flex: 1, backgroundColor: Colors.screenBg },
-    topbar:    { backgroundColor: Colors.topbarBg, paddingHorizontal: Spacing.lg, paddingBottom: 12 },
-    topbarTitle:{ fontFamily: 'Georgia', fontSize: Typography.lg, fontWeight: '700', color: '#fff', letterSpacing: 0.5 },
+    topbar:    { backgroundColor: Colors.topbarBg, paddingHorizontal: Spacing.lg, paddingBottom: 12, flexDirection: 'row', alignItems: 'center', gap: 12 },
+    topbarTitle:{ flex: 1, fontFamily: 'Georgia', fontSize: Typography.lg, fontWeight: '700', color: '#fff', letterSpacing: 0.5 },
     tabBar:    { flexDirection: 'row', backgroundColor: Colors.topbarBg, borderBottomWidth: 0.5, borderBottomColor: Colors.border },
     tabBtn:    { flex: 1, paddingVertical: 10, alignItems: 'center' },
     tabBtnOn:  { borderBottomWidth: 2, borderBottomColor: Colors.doubloonGold },
@@ -330,6 +430,7 @@ export default function CaptainsLogScreen() {
   return (
     <View style={s.container}>
       <View style={[s.topbar, { paddingTop: insets.top + 10 }]}>
+        <HomePortChip/>
         <Text style={s.topbarTitle}>Captain's Log</Text>
       </View>
       <View style={s.tabBar}>

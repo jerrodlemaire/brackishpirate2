@@ -1,19 +1,20 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  ActivityIndicator, RefreshControl, Dimensions, PanResponder, Modal,
+  ActivityIndicator, RefreshControl, Dimensions, PanResponder, Modal, Animated,
 } from 'react-native'
 import MapView, { UrlTile, PROVIDER_GOOGLE } from 'react-native-maps'
-import Svg, { Path, G, Line, Defs, LinearGradient, Stop, Polygon } from 'react-native-svg'
+import Svg, { Path, Defs, LinearGradient, Stop } from 'react-native-svg'
+import * as Haptics from 'expo-haptics'
 import WindCompass from '../../components/WindCompass'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Typography, Spacing, Radius } from '../../constants/theme'
 import { useTheme } from '../../hooks/useTheme'
 import { fetchWeatherAndForecast, weatherEmoji, windDir, getWindColor } from '../../utils/weather'
 import { useDataLocation } from '../../hooks/useDataLocation'
+import { smoothBezierPath, smoothAreaPath } from '../../utils/chart'
 import LocationChip from '../../components/LocationChip'
 import LocationPickerModal from '../../components/LocationPickerModal'
-import ForecastBubble from '../../components/ForecastBubble'
 
 const { width } = Dimensions.get('window')
 const CHART_W = width - 32
@@ -27,31 +28,9 @@ const PLOT_H  = CHART_H - PAD_T - PAD_B
 
 const HOURS = ['12a', '3a', '6a', '9a', '12p', '3p', '6p', '9p']
 
-function smoothBezierPath(pts) {
-  if (pts.length < 2) return ''
-  const t = 0.35
-  let d = `M ${pts[0].x.toFixed(1)},${pts[0].y.toFixed(1)}`
-  for (let i = 0; i < pts.length - 1; i++) {
-    const p0 = pts[Math.max(0, i - 1)], p1 = pts[i]
-    const p2 = pts[i + 1], p3 = pts[Math.min(pts.length - 1, i + 2)]
-    const cp1x = p1.x + (p2.x - p0.x) * t, cp1y = p1.y + (p2.y - p0.y) * t
-    const cp2x = p2.x - (p3.x - p1.x) * t, cp2y = p2.y - (p3.y - p1.y) * t
-    d += ` C ${cp1x.toFixed(1)},${cp1y.toFixed(1)} ${cp2x.toFixed(1)},${cp2y.toFixed(1)} ${p2.x.toFixed(1)},${p2.y.toFixed(1)}`
-  }
-  return d
-}
-
-function smoothAreaPath(pts, bottomY) {
-  if (!pts.length) return ''
-  const line = smoothBezierPath(pts)
-  return `${line} L ${pts[pts.length-1].x.toFixed(1)},${bottomY.toFixed(1)} L ${pts[0].x.toFixed(1)},${bottomY.toFixed(1)} Z`
-}
-
 function radarFrameTime(ts) {
   return new Date(ts * 1000).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
 }
-
-const WindArrow = WindCompass
 
 // ── Mini sparkline ─────────────────────────────────────────────────────────
 function MiniSparkline({ values, color, h = 22, w = 80 }) {
@@ -71,17 +50,88 @@ function MiniSparkline({ values, color, h = 22, w = 80 }) {
   )
 }
 
+// ── Compact wind particle overlay (for radar card) ──────────────────────────
+const PARTICLE_N = 20
+function RadarWindOverlay({ windSpeed, windDeg }) {
+  const { width: W } = Dimensions.get('window')
+  const H = 200
+  const particles = useRef(
+    Array.from({ length: PARTICLE_N }, () => ({
+      startX: Math.random() * W,
+      startY: Math.random() * H,
+      tx: new Animated.Value(0),
+      ty: new Animated.Value(0),
+      opacity: new Animated.Value(0),
+      size: 2 + Math.random() * 2,
+    }))
+  ).current
+
+  useEffect(() => {
+    const rad = (windDeg * Math.PI) / 180
+    const dx  = -Math.sin(rad)
+    const dy  = Math.cos(rad)
+    const spd = Math.max(3, windSpeed)
+    const dist = Math.min(W, H) * 0.7
+    const dur  = Math.round((dist / spd) * 350)
+    const loops = particles.map((p, i) => {
+      let loop
+      const start = () => {
+        p.tx.setValue(0); p.ty.setValue(0); p.opacity.setValue(0)
+        p.startX = Math.random() * W; p.startY = Math.random() * H
+        loop = Animated.parallel([
+          Animated.timing(p.tx, { toValue: dx * dist, duration: dur, useNativeDriver: true }),
+          Animated.timing(p.ty, { toValue: dy * dist, duration: dur, useNativeDriver: true }),
+          Animated.sequence([
+            Animated.timing(p.opacity, { toValue: 0.75, duration: Math.round(dur * 0.15), useNativeDriver: true }),
+            Animated.timing(p.opacity, { toValue: 0.75, duration: Math.round(dur * 0.65), useNativeDriver: true }),
+            Animated.timing(p.opacity, { toValue: 0,    duration: Math.round(dur * 0.2),  useNativeDriver: true }),
+          ]),
+        ])
+        loop.start(({ finished }) => { if (finished) start() })
+      }
+      const timer = setTimeout(start, (dur / PARTICLE_N) * i)
+      return () => { clearTimeout(timer); loop?.stop() }
+    })
+    return () => { loops.forEach(c => c()) }
+  }, [windDeg, windSpeed])
+
+  return (
+    <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
+      {particles.map((p, i) => (
+        <Animated.View key={i} style={{
+          position: 'absolute', left: p.startX, top: p.startY,
+          width: p.size, height: p.size, borderRadius: p.size / 2,
+          backgroundColor: '#4A8FA8',
+          transform: [{ translateX: p.tx }, { translateY: p.ty }],
+          opacity: p.opacity,
+        }}/>
+      ))}
+    </View>
+  )
+}
+
 // ── Radar card ─────────────────────────────────────────────────────────────
-function RadarCard({ lat, lng }) {
-  const { Colors }   = useTheme()
-  const insets       = useSafeAreaInsets()
-  const [frames,     setFrames]     = useState([])
-  const [frameIdx,   setFrameIdx]   = useState(0)
-  const [playing,    setPlaying]    = useState(true)
-  const [fullscreen, setFullscreen] = useState(false)
-  const playingRef   = useRef(true)
-  const framesRef    = useRef([])
-  const region       = { latitude: lat, longitude: lng, latitudeDelta: 2.5, longitudeDelta: 2.5 }
+function RadarCard({ lat, lng, windData }) {
+  const { Colors }    = useTheme()
+  const insets        = useSafeAreaInsets()
+  const [frames,      setFrames]      = useState([])
+  const [frameIdx,    setFrameIdx]    = useState(0)
+  const [playing,     setPlaying]     = useState(true)
+  const [fullscreen,  setFullscreen]  = useState(false)
+  const [radarLayers, setRadarLayers] = useState(['rain'])
+  const playingRef    = useRef(true)
+  const framesRef     = useRef([])
+  const region        = { latitude: lat, longitude: lng, latitudeDelta: 2.5, longitudeDelta: 2.5 }
+
+  const toggleRadarLayer = (id) => {
+    setRadarLayers(prev => prev.includes(id) ? prev.filter(l => l !== id) : [...prev, id])
+  }
+
+  const RADAR_LAYER_OPTS = [
+    { id: 'rain', label: 'Rain' },
+    { id: 'wind', label: 'Wind' },
+    { id: 'temp', label: 'Temp' },
+  ]
 
   playingRef.current = playing
   framesRef.current  = frames
@@ -106,6 +156,11 @@ function RadarCard({ lat, lng }) {
     fsClose:    { position: 'absolute', right: 16, width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(13,33,55,0.85)', alignItems: 'center', justifyContent: 'center', borderWidth: 0.5, borderColor: Colors.border },
     fsCloseTxt: { fontSize: 14, color: '#fff', fontWeight: '600' },
     fsBar:      { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: 'rgba(13,33,55,0.92)', borderTopWidth: 0.5, borderTopColor: Colors.border, paddingTop: 4 },
+    layerRow:     { flexDirection: 'row', gap: 6, paddingHorizontal: Spacing.lg, paddingBottom: 8 },
+    layerPill:    { paddingHorizontal: 14, paddingVertical: 5, borderRadius: Radius.full, borderWidth: 0.5, borderColor: Colors.border, backgroundColor: Colors.inputBg },
+    layerPillOn:  { backgroundColor: `${Colors.marshGreen}33`, borderColor: Colors.marshGreen },
+    layerPillTxt: { fontSize: Typography.xs, color: Colors.textSecondary, fontWeight: '500' },
+    layerPillTxtOn:{ color: Colors.marshGreen, fontWeight: '700' },
   }), [Colors])
 
   useEffect(() => {
@@ -154,18 +209,37 @@ function RadarCard({ lat, lng }) {
             : <Text style={rc.frameTime}>{radarFrameTime(frames[frameIdx].time)}</Text>
           }
         </View>
+        {/* Layer pills */}
+        <View style={rc.layerRow}>
+          {RADAR_LAYER_OPTS.map(opt => {
+            const on = radarLayers.includes(opt.id)
+            return (
+              <TouchableOpacity key={opt.id}
+                style={[rc.layerPill, on && rc.layerPillOn]}
+                onPress={() => toggleRadarLayer(opt.id)}>
+                <Text style={[rc.layerPillTxt, on && rc.layerPillTxtOn]}>{opt.label}</Text>
+              </TouchableOpacity>
+            )
+          })}
+        </View>
         <TouchableOpacity activeOpacity={0.9} onPress={() => setFullscreen(true)} style={rc.mapWrap}>
           <MapView style={rc.map} provider={PROVIDER_GOOGLE} mapType="satellite"
             initialRegion={region} scrollEnabled={false} zoomEnabled={false}
             rotateEnabled={false} pitchEnabled={false} showsUserLocation={false}
             showsMyLocationButton={false} showsCompass={false} toolbarEnabled={false}
             minZoomLevel={3} maxZoomLevel={18} pointerEvents="none">
-            {frames.map((frame, i) => (
+            {radarLayers.includes('rain') && frames.map((frame, i) => (
               <UrlTile key={i} urlTemplate={`${frame.url}/256/{z}/{x}/{y}/2/1_1.png`}
                 zIndex={2} opacity={i === frameIdx ? 0.7 : 0} tileSize={256}
                 minimumZ={1} maximumZ={12} maximumNativeZ={8}/>
             ))}
           </MapView>
+          {radarLayers.includes('wind') && windData && (
+            <RadarWindOverlay
+              windSpeed={windData.windspeed_10m ?? 10}
+              windDeg={windData.winddirection_10m ?? 180}
+            />
+          )}
           <View style={rc.expandHint}><Text style={rc.expandTxt}>⤢ Full screen</Text></View>
         </TouchableOpacity>
         {frames.length > 0 && <Timeline/>}
@@ -198,13 +272,14 @@ function RadarCard({ lat, lng }) {
 function TempChart({ temps }) {
   const { Colors } = useTheme()
   const [scrubIdx, setScrubIdx] = useState(null)
-  const panRef    = useRef(null)
-  const getIdxFn  = useRef(null)
-  const tempsRef  = useRef([])
-  const stepXRef  = useRef(1)
+  const panRef     = useRef(null)
+  const getIdxFn   = useRef(null)
+  const tempsRef   = useRef([])
+  const stepXRef   = useRef(1)
+  const lastHaptic = useRef(-1)
 
   const ch = useMemo(() => StyleSheet.create({
-    wrap:      { height: CHART_H, width: CHART_W, position: 'relative', marginBottom: 4 },
+    wrap:      { height: CHART_H, width: CHART_W, position: 'relative', marginBottom: 4, overflow: 'hidden' },
     gridLbl:   { position: 'absolute', left: 0, width: PAD_L - 4, textAlign: 'right', fontSize: 11, fontWeight: 'bold', color: Colors.textMuted },
     nowLine:   { position: 'absolute', top: PAD_T, bottom: PAD_B, width: 1.5, backgroundColor: Colors.doubloonGold },
     scrubLine: { position: 'absolute', top: PAD_T, bottom: PAD_B, width: 1.5, backgroundColor: Colors.marshGreen, opacity: 0.8 },
@@ -215,10 +290,19 @@ function TempChart({ temps }) {
 
   if (!panRef.current) {
     panRef.current = PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder:  () => true,
-      onPanResponderGrant: (e) => { const i = getIdxFn.current?.(e.nativeEvent.locationX); if (i != null) setScrubIdx(i) },
-      onPanResponderMove:  (e) => { const i = getIdxFn.current?.(e.nativeEvent.locationX); if (i != null) setScrubIdx(i) },
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (_e, g) =>
+        Math.abs(g.dx) > 6 && Math.abs(g.dx) > Math.abs(g.dy),
+      onMoveShouldSetPanResponderCapture: (_e, g) =>
+        Math.abs(g.dx) > 6 && Math.abs(g.dx) > Math.abs(g.dy),
+      onPanResponderGrant: (e) => {
+        const i = getIdxFn.current?.(e.nativeEvent.locationX)
+        if (i != null) { setScrubIdx(i); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); lastHaptic.current = i }
+      },
+      onPanResponderMove: (e) => {
+        const i = getIdxFn.current?.(e.nativeEvent.locationX)
+        if (i != null) { setScrubIdx(i); if (i !== lastHaptic.current) { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); lastHaptic.current = i } }
+      },
       onPanResponderRelease: () => { setTimeout(() => setScrubIdx(null), 2500) },
     })
   }
@@ -239,7 +323,14 @@ function TempChart({ temps }) {
   const gridVals = [minVal, minVal + range * 0.5, maxVal]
 
   return (
-    <View style={ch.wrap} {...pan.panHandlers}>
+    <View
+      style={ch.wrap}
+      onTouchStart={(e) => {
+        const i = getIdxFn.current?.(e.nativeEvent.locationX)
+        if (i != null) setScrubIdx(i)
+      }}
+      {...pan.panHandlers}
+    >
       <Svg width={CHART_W} height={CHART_H} style={StyleSheet.absoluteFillObject}>
         <Defs>
           <LinearGradient id="tempGrad" x1="0" y1="0" x2="0" y2="1">
@@ -270,156 +361,6 @@ function TempChart({ temps }) {
       {HOURS.map((l, i) => (
         <Text key={i} style={[ch.xLbl, { left: PAD_L + (PLOT_W / (HOURS.length - 1)) * i - 8, top: CHART_H - PAD_B + 4 }]}>{l}</Text>
       ))}
-    </View>
-  )
-}
-
-// ── Hourly wind chart (speed bezier + direction arrows) ────────────────────
-function WindChart({ speeds, dirs }) {
-  const { Colors } = useTheme()
-  const [scrubIdx, setScrubIdx] = useState(null)
-  const panRef    = useRef(null)
-  const getIdxFn  = useRef(null)
-  const dataRef   = useRef([])
-  const stepXRef  = useRef(1)
-
-  const wc = useMemo(() => StyleSheet.create({
-    wrap:      { height: CHART_H, width: CHART_W, position: 'relative', marginBottom: 4 },
-    gridLbl:   { position: 'absolute', left: 0, width: PAD_L - 4, textAlign: 'right', fontSize: 11, fontWeight: 'bold', color: Colors.textMuted },
-    nowLine:   { position: 'absolute', top: PAD_T, bottom: PAD_B, width: 1.5, backgroundColor: Colors.doubloonGold },
-    scrubLine: { position: 'absolute', top: PAD_T, bottom: PAD_B, width: 1.5, backgroundColor: Colors.brackishWater, opacity: 0.8 },
-    bubble:    { position: 'absolute', backgroundColor: Colors.brackishWater, borderRadius: Radius.sm, paddingHorizontal: 8, paddingVertical: 5, minWidth: 72, alignItems: 'center', flexDirection: 'row', gap: 5, justifyContent: 'center' },
-    bubbleVal: { fontSize: 14, fontWeight: '700', color: '#fff' },
-    xLbl:      { position: 'absolute', fontSize: 11, fontWeight: 'bold', color: Colors.textSecondary },
-    arrowRow:  { position: 'absolute', flexDirection: 'row', left: PAD_L, right: PAD_R, bottom: 4, justifyContent: 'space-between' },
-  }), [Colors])
-
-  if (!panRef.current) {
-    panRef.current = PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder:  () => true,
-      onPanResponderGrant: (e) => { const i = getIdxFn.current?.(e.nativeEvent.locationX); if (i != null) setScrubIdx(i) },
-      onPanResponderMove:  (e) => { const i = getIdxFn.current?.(e.nativeEvent.locationX); if (i != null) setScrubIdx(i) },
-      onPanResponderRelease: () => { setTimeout(() => setScrubIdx(null), 2500) },
-    })
-  }
-
-  if (!speeds || speeds.length === 0) return (
-    <View style={[wc.wrap, { alignItems: 'center', justifyContent: 'center' }]}><ActivityIndicator color={Colors.brackishWater}/></View>
-  )
-
-  const minVal = 0
-  const maxVal = Math.max(...speeds, 5)
-  const range  = maxVal - minVal || 1
-  const stepX  = PLOT_W / (speeds.length - 1)
-  dataRef.current  = speeds; stepXRef.current = stepX
-  getIdxFn.current = (x) => Math.max(0, Math.min(dataRef.current.length - 1, Math.round((x - PAD_L) / stepXRef.current)))
-  const pan  = panRef.current
-  const pts  = speeds.map((v, i) => ({ x: PAD_L + i * stepX, y: PAD_T + PLOT_H - ((v - minVal) / range) * PLOT_H, v }))
-  const nowX = PAD_L + Math.min(new Date().getHours(), speeds.length - 1) * stepX
-  const scrub      = scrubIdx !== null ? pts[scrubIdx] : null
-  const lineColor  = getWindColor(maxVal)
-  const gridVals   = [0, Math.round(maxVal * 0.5), Math.round(maxVal)]
-
-  // Arrow markers every 3 hours
-  const arrowHours = [0, 3, 6, 9, 12, 15, 18, 21]
-
-  return (
-    <View style={wc.wrap} {...pan.panHandlers}>
-      <Svg width={CHART_W} height={CHART_H - PAD_B + 4} style={{ position: 'absolute', top: 0, left: 0 }}>
-        <Defs>
-          <LinearGradient id="windGrad" x1="0" y1="0" x2="0" y2="1">
-            <Stop offset="0" stopColor={lineColor} stopOpacity="0.35"/>
-            <Stop offset="1" stopColor={lineColor} stopOpacity="0.03"/>
-          </LinearGradient>
-        </Defs>
-        {gridVals.map((v, i) => {
-          const y = PAD_T + PLOT_H - ((v - minVal) / range) * PLOT_H
-          return <Path key={i} d={`M ${PAD_L},${y.toFixed(1)} L ${CHART_W - PAD_R},${y.toFixed(1)}`} stroke={`${lineColor}20`} strokeWidth="0.5"/>
-        })}
-        <Path d={smoothAreaPath(pts, CHART_H - PAD_B)} fill="url(#windGrad)"/>
-        <Path d={smoothBezierPath(pts)} fill="none" stroke={lineColor} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-      </Svg>
-
-      {gridVals.map((v, i) => {
-        const y = PAD_T + PLOT_H - ((v - minVal) / range) * PLOT_H
-        return <Text key={i} style={[wc.gridLbl, { top: y - 6 }]}>{v}</Text>
-      })}
-      <View style={[wc.nowLine, { left: nowX }]}/>
-      {scrub && (
-        <>
-          <View style={[wc.scrubLine, { left: scrub.x, backgroundColor: getWindColor(scrub.v) }]}/>
-          <View style={[wc.bubble, { left: Math.min(Math.max(scrub.x - 40, PAD_L), CHART_W - PAD_R - 90), top: scrub.y - 40, backgroundColor: getWindColor(scrub.v) }]}>
-            {dirs && dirs[scrubIdx] != null && <WindArrow deg={dirs[scrubIdx]} size={14} color="#fff"/>}
-            <Text style={wc.bubbleVal}>{Math.round(scrub.v)} mph</Text>
-          </View>
-        </>
-      )}
-      {HOURS.map((l, i) => (
-        <Text key={i} style={[wc.xLbl, { left: PAD_L + (PLOT_W / (HOURS.length - 1)) * i - 8, top: CHART_H - PAD_B + 4 }]}>{l}</Text>
-      ))}
-
-      {/* Direction arrows at 3-hour marks */}
-      {dirs && dirs.length > 0 && (
-        <View style={wc.arrowRow}>
-          {arrowHours.map(h => {
-            const idx = Math.min(h, dirs.length - 1)
-            if (dirs[idx] == null) return <View key={h} style={{ width: 18 }}/>
-            return (
-              <View key={h} style={{ alignItems: 'center' }}>
-                <WindArrow deg={dirs[idx]} size={18} color={`${Colors.brackishWater}CC`}/>
-              </View>
-            )
-          })}
-        </View>
-      )}
-    </View>
-  )
-}
-
-// ── 10-day wind forecast strip ────────────────────────────────────────────
-function TenDayWindStrip({ daily }) {
-  const { Colors } = useTheme()
-  const ws = useMemo(() => StyleSheet.create({
-    wrap:    { gap: 6 },
-    title:   { fontSize: Typography.base, fontWeight: '600', color: Colors.textPrimary, marginBottom: 6 },
-    row:     { flexDirection: 'row', alignItems: 'center', paddingVertical: 9, borderBottomWidth: 0.5, borderBottomColor: Colors.border, gap: 8 },
-    day:     { width: 38, fontSize: Typography.sm, color: Colors.textSecondary, fontWeight: '500' },
-    dayToday:{ color: Colors.brackishWater, fontWeight: '700' },
-    arrow:   { width: 22, alignItems: 'center' },
-    barWrap: { flex: 1, height: 6, backgroundColor: Colors.inputBg, borderRadius: 3, overflow: 'hidden' },
-    bar:     { height: '100%', borderRadius: 3, backgroundColor: Colors.brackishWater },
-    speed:   { width: 52, fontSize: Typography.sm, fontWeight: '600', color: Colors.textPrimary, textAlign: 'right' },
-  }), [Colors])
-
-  if (!daily?.windspeed_10m_max?.length) return null
-  const maxSpeed = Math.max(...daily.windspeed_10m_max.slice(0, 10), 1)
-  const count    = Math.min(daily.time.length, 10)
-
-  return (
-    <View style={ws.wrap}>
-      <Text style={ws.title}>10-day wind forecast</Text>
-      {Array.from({ length: count }, (_, i) => {
-        const date    = new Date(daily.time[i] + 'T12:00:00')
-        const isToday = new Date().toDateString() === date.toDateString()
-        const dayName = isToday ? 'Today' : date.toLocaleDateString('en-US', { weekday: 'short' })
-        const spd     = Math.round(daily.windspeed_10m_max[i])
-        const dir     = daily.winddirection_10m_dominant?.[i]
-        const barW    = (spd / maxSpeed) * 100
-        const barColor = getWindColor(spd)
-        return (
-          <View key={i} style={ws.row}>
-            <Text style={[ws.day, isToday && ws.dayToday]}>{dayName}</Text>
-            <View style={ws.arrow}>
-              {dir != null && <WindArrow deg={dir} size={20} color={barColor}/>}
-            </View>
-            <View style={ws.barWrap}>
-              <View style={[ws.bar, { width: `${barW}%`, backgroundColor: barColor }]}/>
-            </View>
-            <Text style={ws.speed}>{spd} mph</Text>
-          </View>
-        )
-      })}
     </View>
   )
 }
@@ -461,7 +402,7 @@ function WeatherDayStrip({ daily, selectedIdx, onSelect }) {
 }
 
 // ── Screen ────────────────────────────────────────────────────────────────
-export default function WeatherScreen({ navigation }) {
+export default function WeatherScreen() {
   const { Colors }  = useTheme()
   const insets      = useSafeAreaInsets()
   const { weatherLocation, setWeatherLocation } = useDataLocation()
@@ -488,9 +429,7 @@ export default function WeatherScreen({ navigation }) {
 
   const cur    = weather?.current
   const daily  = weather?.daily
-  const hourly = weather?.hourlyTemps         || []
-  const wSpeeds= weather?.hourlyWindSpeeds    || []
-  const wDirs  = weather?.hourlyWindDirs      || []
+  const hourly = weather?.hourlyTemps || []
 
   const selIdx  = Math.min(selectedDayIdx, (daily?.time?.length ?? 1) - 1)
   const isToday = selIdx === 0
@@ -533,10 +472,7 @@ export default function WeatherScreen({ navigation }) {
 
   return (
     <View style={s.container}>
-      <View style={[s.topbar, { paddingTop: insets.top + 10 }]}>
-        <TouchableOpacity onPress={() => navigation?.navigate('Dashboard')} style={s.topbarBack}>
-          <Text style={s.topbarBackTxt}>‹</Text>
-        </TouchableOpacity>
+      <View style={[s.topbar, { paddingTop: 10 }]}>
         <Text style={s.topbarTitle}>Weather</Text>
         <LocationChip label={weatherLocation.name} onPress={() => setShowPicker(true)} color="#fff" boneColor={Colors.topbarBg}/>
       </View>
@@ -598,40 +534,20 @@ export default function WeatherScreen({ navigation }) {
                 )}
               </View>
 
-              {/* Hourly wind speed sparkline inline */}
-              {isToday && wSpeeds.length > 0 && (
-                <View style={s.heroSparkRow}>
-                  <Text style={s.heroSparkLbl}>HOURLY WIND SPEED (mph)</Text>
-                  <MiniSparkline values={wSpeeds} color={getWindColor(cur?.windspeed_10m ?? 0)} h={28} w={CHART_W - Spacing.md * 2}/>
-                </View>
-              )}
             </View>
 
             {/* Live radar */}
-            <RadarCard lat={weatherLocation.lat} lng={weatherLocation.lng}/>
+            <RadarCard lat={weatherLocation.lat} lng={weatherLocation.lng} windData={cur}/>
 
             {/* Hourly temp chart — today only */}
             {isToday && (
-              <View style={s.card}>
-                <Text style={s.cardTitle}>24-hour temperature</Text>
-                <Text style={s.cardSub}>Today's hourly forecast · °F</Text>
+              <View style={[s.card, { paddingHorizontal: 0, overflow: 'hidden' }]}>
+                <Text style={[s.cardTitle, { paddingHorizontal: Spacing.lg }]}>24-hour temperature</Text>
+                <Text style={[s.cardSub, { paddingHorizontal: Spacing.lg }]}>Today's hourly forecast · °F</Text>
                 <TempChart temps={hourly}/>
               </View>
             )}
 
-            {/* Hourly wind chart — today only */}
-            {isToday && wSpeeds.length > 0 && (
-              <View style={s.card}>
-                <Text style={s.cardTitle}>Hourly wind</Text>
-                <Text style={s.cardSub}>Speed (mph) · arrows show direction</Text>
-                <WindChart speeds={wSpeeds} dirs={wDirs}/>
-              </View>
-            )}
-
-            {/* 10-day wind forecast */}
-            <View style={s.card}>
-              <TenDayWindStrip daily={daily}/>
-            </View>
           </>
         )}
       </ScrollView>
@@ -644,7 +560,6 @@ export default function WeatherScreen({ navigation }) {
         initialLat={weatherLocation.lat}
         initialLng={weatherLocation.lng}
       />
-      <ForecastBubble navigation={navigation} activeRoute="Weather"/>
     </View>
   )
 }

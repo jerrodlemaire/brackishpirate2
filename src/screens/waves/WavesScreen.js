@@ -4,15 +4,15 @@ import {
   ActivityIndicator, RefreshControl, Dimensions, PanResponder,
 } from 'react-native'
 import Svg, { Path, Defs, LinearGradient, Stop } from 'react-native-svg'
-import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import * as Haptics from 'expo-haptics'
 import { Typography, Spacing, Radius } from '../../constants/theme'
 import { useTheme } from '../../hooks/useTheme'
 import { fetchMarineData } from '../../utils/weather'
 import { fetchNdbcObservations } from '../../utils/ndbc'
 import { useDataLocation } from '../../hooks/useDataLocation'
+import { smoothBezierPath, smoothAreaPath } from '../../utils/chart'
 import LocationChip from '../../components/LocationChip'
 import BuoyPickerModal from '../../components/BuoyPickerModal'
-import ForecastBubble from '../../components/ForecastBubble'
 
 const { width } = Dimensions.get('window')
 const CHART_W = width - 32
@@ -32,37 +32,18 @@ function waveDir(deg) {
 
 const HOURS = ['12a', '3a', '6a', '9a', '12p', '3p', '6p', '9p']
 
-function smoothBezierPath(pts) {
-  if (pts.length < 2) return ''
-  const t = 0.35
-  let d = `M ${pts[0].x.toFixed(1)},${pts[0].y.toFixed(1)}`
-  for (let i = 0; i < pts.length - 1; i++) {
-    const p0 = pts[Math.max(0, i - 1)], p1 = pts[i]
-    const p2 = pts[i + 1], p3 = pts[Math.min(pts.length - 1, i + 2)]
-    const cp1x = p1.x + (p2.x - p0.x) * t, cp1y = p1.y + (p2.y - p0.y) * t
-    const cp2x = p2.x - (p3.x - p1.x) * t, cp2y = p2.y - (p3.y - p1.y) * t
-    d += ` C ${cp1x.toFixed(1)},${cp1y.toFixed(1)} ${cp2x.toFixed(1)},${cp2y.toFixed(1)} ${p2.x.toFixed(1)},${p2.y.toFixed(1)}`
-  }
-  return d
-}
-
-function smoothAreaPath(pts, bottomY) {
-  if (!pts.length) return ''
-  const line = smoothBezierPath(pts)
-  return `${line} L ${pts[pts.length-1].x.toFixed(1)},${bottomY.toFixed(1)} L ${pts[0].x.toFixed(1)},${bottomY.toFixed(1)} Z`
-}
-
 // ── Wave chart ────────────────────────────────────────────────────────────────
 function WaveChart({ waves }) {
   const { Colors } = useTheme()
   const [scrubIdx, setScrubIdx] = useState(null)
-  const panRef   = useRef(null)
-  const getIdxFn = useRef(null)
-  const wavesRef = useRef([])
-  const stepXRef = useRef(1)
+  const panRef    = useRef(null)
+  const getIdxFn  = useRef(null)
+  const wavesRef  = useRef([])
+  const stepXRef  = useRef(1)
+  const lastHaptic = useRef(-1)
 
   const wc = useMemo(() => StyleSheet.create({
-    wrap:      { height: CHART_H, width: CHART_W, position: 'relative', marginBottom: 4 },
+    wrap:      { height: CHART_H, width: CHART_W, position: 'relative', marginBottom: 4, overflow: 'hidden' },
     gridLbl:   { position: 'absolute', left: 0, width: PAD_L - 4, textAlign: 'right', fontSize: 11, fontWeight: 'bold', color: Colors.textMuted },
     nowLine:   { position: 'absolute', top: PAD_T, bottom: PAD_B, width: 1.5, backgroundColor: Colors.doubloonGold },
     scrubLine: { position: 'absolute', top: PAD_T, bottom: PAD_B, width: 1.5, backgroundColor: Colors.brackishWater, opacity: 0.8 },
@@ -73,15 +54,28 @@ function WaveChart({ waves }) {
 
   if (!panRef.current) {
     panRef.current = PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder:  () => true,
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (_e, g) =>
+        Math.abs(g.dx) > 6 && Math.abs(g.dx) > Math.abs(g.dy),
+      onMoveShouldSetPanResponderCapture: (_e, g) =>
+        Math.abs(g.dx) > 6 && Math.abs(g.dx) > Math.abs(g.dy),
       onPanResponderGrant: (e) => {
         const i = getIdxFn.current?.(e.nativeEvent.locationX)
-        if (i != null) setScrubIdx(i)
+        if (i != null) {
+          setScrubIdx(i)
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+          lastHaptic.current = i
+        }
       },
       onPanResponderMove: (e) => {
         const i = getIdxFn.current?.(e.nativeEvent.locationX)
-        if (i != null) setScrubIdx(i)
+        if (i != null) {
+          setScrubIdx(i)
+          if (i !== lastHaptic.current) {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+            lastHaptic.current = i
+          }
+        }
       },
       onPanResponderRelease: () => { setTimeout(() => setScrubIdx(null), 2500) },
     })
@@ -115,7 +109,14 @@ function WaveChart({ waves }) {
   const gridVals = [minVal, minVal + range * 0.5, maxVal]
 
   return (
-    <View style={wc.wrap} {...pan.panHandlers}>
+    <View
+      style={wc.wrap}
+      onTouchStart={(e) => {
+        const i = getIdxFn.current?.(e.nativeEvent.locationX)
+        if (i != null) setScrubIdx(i)
+      }}
+      {...pan.panHandlers}
+    >
       <Svg width={CHART_W} height={CHART_H} style={StyleSheet.absoluteFillObject}>
         <Defs>
           <LinearGradient id="waveGrad" x1="0" y1="0" x2="0" y2="1">
@@ -167,7 +168,7 @@ function WavesDayStrip({ dailyMax, selectedIdx, onSelect }) {
   const dws = useMemo(() => StyleSheet.create({
     scroll:  { backgroundColor: Colors.topbarBg },
     content: { paddingHorizontal: 12, paddingVertical: 10, gap: 6 },
-    pill:    { width: 58, alignItems: 'center', paddingVertical: 8, borderRadius: Radius.md, borderWidth: 0.5, borderColor: 'rgba(255,255,255,0.15)', backgroundColor: 'rgba(255,255,255,0.04)', gap: 2 },
+    pill:    { width: 58, alignItems: 'center', paddingTop: 8, paddingBottom: 16, borderRadius: Radius.md, borderWidth: 0.5, borderColor: 'rgba(255,255,255,0.15)', backgroundColor: 'rgba(255,255,255,0.04)', gap: 2 },
     pillSel: { backgroundColor: `${Colors.brackishWater}59`, borderColor: Colors.brackishWater },
     label:   { fontSize: 9, color: 'rgba(255,255,255,0.7)', fontWeight: '600', letterSpacing: 0.3 },
     num:     { fontSize: Typography.md, fontWeight: '700', color: '#fff' },
@@ -206,9 +207,8 @@ function WavesDayStrip({ dailyMax, selectedIdx, onSelect }) {
 }
 
 // ── Screen ────────────────────────────────────────────────────────────────────
-export default function WavesScreen({ navigation }) {
+export default function WavesScreen() {
   const { Colors }  = useTheme()
-  const insets = useSafeAreaInsets()
   const { buoy, setBuoy } = useDataLocation()
   const [marine,          setMarine]          = useState(null)
   const [ndbcObs,         setNdbcObs]         = useState(null)
@@ -293,10 +293,7 @@ export default function WavesScreen({ navigation }) {
     <View style={s.container}>
 
       {/* TOPBAR */}
-      <View style={[s.topbar, { paddingTop: insets.top + 10 }]}>
-        <TouchableOpacity onPress={() => navigation?.navigate('Dashboard')} style={s.topbarBack}>
-          <Text style={s.topbarBackTxt}>‹</Text>
-        </TouchableOpacity>
+      <View style={[s.topbar, { paddingTop: 10 }]}>
         <Text style={s.topbarTitle}>Waves</Text>
         <LocationChip
           label={buoy.name}
@@ -352,11 +349,35 @@ export default function WavesScreen({ navigation }) {
             </View>
 
             {/* Wave height chart */}
-            <View style={s.card}>
-              <Text style={s.cardTitle}>24-hour wave height</Text>
-              <Text style={s.cardSub}>Open-Meteo marine forecast · feet · {buoy.name}</Text>
+            <View style={[s.card, { paddingHorizontal: 0, overflow: 'hidden' }]}>
+              <Text style={[s.cardTitle, { paddingHorizontal: Spacing.lg }]}>24-hour wave height</Text>
+              <Text style={[s.cardSub, { paddingHorizontal: Spacing.lg }]}>Open-Meteo marine forecast · feet · {buoy.name}</Text>
               <WaveChart waves={hourlyWaves}/>
             </View>
+
+            {/* NDBC buoy observations — moved up before 7-day */}
+            {ndbcObs && (
+              <View style={s.card}>
+                <Text style={s.cardTitle}>NDBC buoy {buoy.id}</Text>
+                <Text style={s.cardSub}>Latest observed conditions</Text>
+                <View style={s.obsGrid}>
+                  {[
+                    { label: 'Wave height', val: ndbcObs.waveHeight != null ? `${ndbcObs.waveHeight} ft` : '—', icon: '🌊' },
+                    { label: 'Dom. period',  val: ndbcObs.period     != null ? `${ndbcObs.period} sec`   : '—', icon: '⏱' },
+                    { label: 'Wave dir',     val: ndbcObs.waveDir    != null ? waveDir(ndbcObs.waveDir)  : '—', icon: '🧭' },
+                    { label: 'Wind speed',   val: ndbcObs.windSpeed  != null ? `${ndbcObs.windSpeed} kt` : '—', icon: '💨' },
+                    { label: 'Air temp',     val: ndbcObs.airTemp    != null ? `${ndbcObs.airTemp}°F`    : '—', icon: '🌡' },
+                    { label: 'Water temp',   val: ndbcObs.waterTemp  != null ? `${ndbcObs.waterTemp}°F`  : '—', icon: '🌊' },
+                  ].map((c, i) => (
+                    <View key={i} style={s.obsCard}>
+                      <Text style={s.obsIcon}>{c.icon}</Text>
+                      <Text style={s.obsLabel}>{c.label}</Text>
+                      <Text style={s.obsVal}>{c.val}</Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            )}
 
             {/* 7-day max waves */}
             {dailyMax.length > 0 && (
@@ -380,30 +401,6 @@ export default function WavesScreen({ navigation }) {
                 </View>
               </View>
             )}
-
-            {/* NDBC buoy observations */}
-            {ndbcObs && (
-              <View style={s.card}>
-                <Text style={s.cardTitle}>NDBC buoy {buoy.id}</Text>
-                <Text style={s.cardSub}>Latest observed conditions</Text>
-                <View style={s.obsGrid}>
-                  {[
-                    { label: 'Wave height', val: ndbcObs.waveHeight != null ? `${ndbcObs.waveHeight} ft` : '—', icon: '🌊' },
-                    { label: 'Dom. period',  val: ndbcObs.period     != null ? `${ndbcObs.period} sec`   : '—', icon: '⏱' },
-                    { label: 'Wave dir',     val: ndbcObs.waveDir    != null ? waveDir(ndbcObs.waveDir)  : '—', icon: '🧭' },
-                    { label: 'Wind speed',   val: ndbcObs.windSpeed  != null ? `${ndbcObs.windSpeed} kt` : '—', icon: '💨' },
-                    { label: 'Air temp',     val: ndbcObs.airTemp    != null ? `${ndbcObs.airTemp}°F`    : '—', icon: '🌡' },
-                    { label: 'Water temp',   val: ndbcObs.waterTemp  != null ? `${ndbcObs.waterTemp}°F`  : '—', icon: '🌊' },
-                  ].map((c, i) => (
-                    <View key={i} style={s.obsCard}>
-                      <Text style={s.obsIcon}>{c.icon}</Text>
-                      <Text style={s.obsLabel}>{c.label}</Text>
-                      <Text style={s.obsVal}>{c.val}</Text>
-                    </View>
-                  ))}
-                </View>
-              </View>
-            )}
           </>
         )}
       </ScrollView>
@@ -415,7 +412,6 @@ export default function WavesScreen({ navigation }) {
         currentBuoyId={buoy.id}
       />
 
-      <ForecastBubble navigation={navigation} activeRoute="Waves"/>
     </View>
   )
 }

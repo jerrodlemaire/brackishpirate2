@@ -1,16 +1,13 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react'
-import AsyncStorage from '@react-native-async-storage/async-storage'
 import { findNearestStation } from '../utils/tides'
 import { fetchNdbcBuoys } from '../utils/ndbc'
-import { useApp } from '../context/AppContext'
+import { useApp, DEFAULT_HOME_PORT } from '../context/AppContext'
 
 const DataLocationContext = createContext({})
 
 const DEFAULTS = {
   tideStation:     { id: '8761724', name: 'Grand Isle, LA' },
   buoy:            { id: '42040', name: 'LUKE OFFSHORE', lat: 29.212, lng: -88.208 },
-  weatherLocation: { lat: 29.865, lng: -89.674, name: 'Shell Beach Marina' },
-  solunarLocation: { lat: 29.865, lng: -89.674, name: 'Shell Beach Marina' },
 }
 
 function haversine(lat1, lng1, lat2, lng2) {
@@ -26,79 +23,35 @@ export function DataLocationProvider({ children }) {
   const { homePort } = useApp()
   const [tideStation,     setTideStationState]     = useState(DEFAULTS.tideStation)
   const [buoy,            setBuoyState]            = useState(DEFAULTS.buoy)
-  const [weatherLocation, setWeatherLocationState] = useState(DEFAULTS.weatherLocation)
-  const [solunarLocation, setSolunarLocationState] = useState(DEFAULTS.solunarLocation)
+  const [weatherLocation, setWeatherLocationState] = useState({ lat: DEFAULT_HOME_PORT.lat, lng: DEFAULT_HOME_PORT.lng, name: DEFAULT_HOME_PORT.name })
+  const [solunarLocation, setSolunarLocationState] = useState({ lat: DEFAULT_HOME_PORT.lat, lng: DEFAULT_HOME_PORT.lng, name: DEFAULT_HOME_PORT.name })
 
-  async function autoInit(hp, doStation, doBuoy) {
-    if (!hp) return
-    try {
-      await Promise.all([
-        doStation && findNearestStation(hp.lat, hp.lng).then(s => {
-          if (!s) return
-          const val = { id: s.id, name: s.name }
-          setTideStationState(val)
-          return AsyncStorage.setItem('dataLoc_tideStation', JSON.stringify(val))
-        }),
-        doBuoy && fetchNdbcBuoys().then(buoys => {
-          let nearest = null, minDist = Infinity
-          buoys.forEach(b => {
-            const dist = haversine(hp.lat, hp.lng, b.lat, b.lng)
-            if (dist < minDist) { minDist = dist; nearest = b }
-          })
-          if (!nearest) return
-          const val = { id: nearest.id, name: nearest.name, lat: nearest.lat, lng: nearest.lng }
-          setBuoyState(val)
-          return AsyncStorage.setItem('dataLoc_buoy', JSON.stringify(val))
-        }),
-      ].filter(Boolean))
-    } catch (_) {}
-  }
-
+  // When Home Port changes, sync all four data sources.
+  // Session-only: overrides via individual tab pickers are not persisted.
   useEffect(() => {
-    const load = async () => {
-      try {
-        const [ts, b, wl, sl] = await Promise.all([
-          AsyncStorage.getItem('dataLoc_tideStation'),
-          AsyncStorage.getItem('dataLoc_buoy'),
-          AsyncStorage.getItem('dataLoc_weatherLocation'),
-          AsyncStorage.getItem('dataLoc_solunarLocation'),
-        ])
-        if (ts) setTideStationState(JSON.parse(ts))
-        if (b)  setBuoyState(JSON.parse(b))
-        if (wl) setWeatherLocationState(JSON.parse(wl))
-        if (sl) setSolunarLocationState(JSON.parse(sl))
-        if (!ts || !b) {
-          const hp = JSON.parse(await AsyncStorage.getItem('homePort') || 'null') || homePort
-          autoInit(hp, !ts, !b)
-        }
-      } catch (_) {}
-    }
-    load()
-  }, [])
+    if (!homePort?.lat || !homePort?.lng) return
+    setWeatherLocationState({ lat: homePort.lat, lng: homePort.lng, name: homePort.name })
+    setSolunarLocationState({ lat: homePort.lat, lng: homePort.lng, name: homePort.name })
+    findNearestStation(homePort.lat, homePort.lng)
+      .then(s => { if (s) setTideStationState({ id: s.id, name: s.name }) })
+      .catch(() => {})
+    fetchNdbcBuoys()
+      .then(buoys => {
+        let nearest = null, minDist = Infinity
+        buoys.forEach(b => {
+          const dist = haversine(homePort.lat, homePort.lng, b.lat, b.lng)
+          if (dist < minDist) { minDist = dist; nearest = b }
+        })
+        if (nearest) setBuoyState({ id: nearest.id, name: nearest.name, lat: nearest.lat, lng: nearest.lng })
+      })
+      .catch(() => {})
+  }, [homePort.lat, homePort.lng])
 
-  const setTideStation = useCallback(async (id, name) => {
-    const val = { id, name }
-    setTideStationState(val)
-    await AsyncStorage.setItem('dataLoc_tideStation', JSON.stringify(val))
-  }, [])
-
-  const setBuoy = useCallback(async (id, name, lat, lng) => {
-    const val = { id, name, lat, lng }
-    setBuoyState(val)
-    await AsyncStorage.setItem('dataLoc_buoy', JSON.stringify(val))
-  }, [])
-
-  const setWeatherLocation = useCallback(async (lat, lng, name) => {
-    const val = { lat, lng, name }
-    setWeatherLocationState(val)
-    await AsyncStorage.setItem('dataLoc_weatherLocation', JSON.stringify(val))
-  }, [])
-
-  const setSolunarLocation = useCallback(async (lat, lng, name) => {
-    const val = { lat, lng, name }
-    setSolunarLocationState(val)
-    await AsyncStorage.setItem('dataLoc_solunarLocation', JSON.stringify(val))
-  }, [])
+  // Session-only overrides: update state only, not persisted
+  const setTideStation = useCallback((id, name) => setTideStationState({ id, name }), [])
+  const setBuoy = useCallback((id, name, lat, lng) => setBuoyState({ id, name, lat, lng }), [])
+  const setWeatherLocation = useCallback((lat, lng, name) => setWeatherLocationState({ lat, lng, name }), [])
+  const setSolunarLocation = useCallback((lat, lng, name) => setSolunarLocationState({ lat, lng, name }), [])
 
   const findNearestTideStation = useCallback(async (lat, lng) => {
     return findNearestStation(lat, lng)
