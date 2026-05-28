@@ -8,10 +8,10 @@ import * as Haptics from 'expo-haptics'
 import { Typography, Spacing, Radius } from '../../constants/theme'
 import { useTheme } from '../../hooks/useTheme'
 import { fetchTideHourly, fetchTideHiLo } from '../../utils/tides'
-import { getSolunarForDate, scoreColor } from '../../utils/solunar'
 import { useDataLocation } from '../../hooks/useDataLocation'
 import { smoothBezierPath, smoothAreaPath } from '../../utils/chart'
 import LocationChip from '../../components/LocationChip'
+import DayStrip from '../../components/DayStrip'
 import TideStationPickerModal from '../../components/TideStationPickerModal'
 
 const { width } = Dimensions.get('window')
@@ -24,14 +24,8 @@ const PAD_B   = 28
 const PLOT_W  = CHART_W - PAD_L - PAD_R
 const PLOT_H  = CHART_H - PAD_T - PAD_B
 
-function addDays(date, n) {
-  const d = new Date(date)
-  d.setDate(d.getDate() + n)
-  return d
-}
-function isSameDay(a, b) { return a.toDateString() === b.toDateString() }
-
-// ── Tide chart ────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Tide chart
 function TideChart({ hourlyData }) {
   const { Colors }  = useTheme()
   const [scrubIdx, setScrubIdx] = useState(null)
@@ -179,79 +173,6 @@ function TideChart({ hourlyData }) {
         }]}>{l}</Text>
       ))}
     </View>
-  )
-}
-
-// ── Day strip ─────────────────────────────────────────────────────────────────
-function DayStrip({ selectedDate, onSelect }) {
-  const { Colors } = useTheme()
-
-  const ds = useMemo(() => StyleSheet.create({
-    scroll:       { backgroundColor: Colors.topbarBg },
-    content:      { paddingHorizontal: 8, paddingVertical: 10, gap: 4, alignItems: 'center' },
-    monthSep:     { justifyContent: 'center', paddingHorizontal: 10, paddingVertical: 4, marginRight: 2 },
-    monthTxt:     { fontSize: 9, fontWeight: '700', color: 'rgba(255,255,255,0.45)', letterSpacing: 0.5, textTransform: 'uppercase' },
-    pill:         { width: 54, alignItems: 'center', paddingVertical: 8, borderRadius: Radius.md, borderWidth: 0.5, borderColor: 'rgba(255,255,255,0.15)', backgroundColor: 'rgba(255,255,255,0.04)', gap: 2 },
-    pillSelected: { backgroundColor: 'rgba(255,255,255,0.22)', borderColor: '#fff' },
-    pillToday:    { borderColor: Colors.doubloonGold },
-    dayName:      { fontSize: 9, color: 'rgba(255,255,255,0.75)', fontWeight: '600', letterSpacing: 0.3 },
-    dayNum:       { fontSize: Typography.md, fontWeight: '700', color: '#fff' },
-    moon:         { fontSize: 12 },
-    tideVal:      { fontSize: 9, color: 'rgba(255,255,255,0.7)' },
-    dot:          { width: 6, height: 6, borderRadius: 3 },
-    textSel:      { color: '#fff' },
-  }), [Colors])
-
-  const today = useMemo(() => {
-    const d = new Date(); d.setHours(0, 0, 0, 0); return d
-  }, [])
-
-  const items = useMemo(() => {
-    const result = []
-    let lastMonth = -1
-    for (let i = 0; i < 120; i++) {
-      const d = addDays(today, i)
-      const m = d.getMonth()
-      if (m !== lastMonth) {
-        result.push({ type: 'month', label: d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }), key: `m-${i}` })
-        lastMonth = m
-      }
-      result.push({ type: 'day', date: d, key: `d-${i}` })
-    }
-    return result
-  }, [today])
-
-  return (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false}
-      style={ds.scroll} contentContainerStyle={ds.content}>
-      {items.map(item => {
-        if (item.type === 'month') {
-          return (
-            <View key={item.key} style={ds.monthSep}>
-              <Text style={ds.monthTxt}>{item.label}</Text>
-            </View>
-          )
-        }
-        const day = item.date
-        const sol      = getSolunarForDate(day)
-        const selected = isSameDay(day, selectedDate)
-        const todayDay = isSameDay(day, today)
-        return (
-          <TouchableOpacity key={item.key}
-            style={[ds.pill, selected && ds.pillSelected, todayDay && !selected && ds.pillToday]}
-            onPress={() => onSelect(day)}
-          >
-            <Text style={[ds.dayName, selected && ds.textSel]}>
-              {day.toLocaleDateString('en-US', { weekday: 'short' })}
-            </Text>
-            <Text style={[ds.dayNum, selected && ds.textSel]}>{day.getDate()}</Text>
-            <Text style={ds.moon}>{sol.moonPhase.emoji}</Text>
-            <Text style={[ds.tideVal, selected && ds.textSel]}>—</Text>
-            <View style={[ds.dot, { backgroundColor: scoreColor(sol.activityScore) }]}/>
-          </TouchableOpacity>
-        )
-      })}
-    </ScrollView>
   )
 }
 

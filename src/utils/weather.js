@@ -34,12 +34,27 @@ export async function fetchWeatherAndForecast(lat = LAT, lng = LNG) {
   const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current=temperature_2m,windspeed_10m,winddirection_10m,weathercode&hourly=temperature_2m,windspeed_10m,winddirection_10m&daily=temperature_2m_max,temperature_2m_min,windspeed_10m_max,winddirection_10m_dominant,precipitation_probability_max,weathercode&temperature_unit=fahrenheit&windspeed_unit=mph&timezone=America%2FChicago&forecast_days=10`
   const res  = await fetch(url)
   const data = await res.json()
+  if (!data.current) throw new Error('Weather API unavailable')
   return {
     current:          data.current,
     daily:            data.daily,
     hourlyTemps:      data.hourly?.temperature_2m?.slice(0, 24) ?? [],
     hourlyWindSpeeds: data.hourly?.windspeed_10m?.slice(0, 24) ?? [],
     hourlyWindDirs:   data.hourly?.winddirection_10m?.slice(0, 24) ?? [],
+  }
+}
+
+export async function fetchPressureTrend(lat = LAT, lng = LNG) {
+  const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&hourly=pressure_msl&past_hours=6&forecast_days=1&timezone=America%2FChicago`
+  const res  = await fetch(url)
+  const data = await res.json()
+  const arr  = data.hourly?.pressure_msl ?? []
+  // Index 0 = 6 h ago, index 5 = ~now, index 6+ = forecast
+  const p0   = arr[0] ?? null
+  const p5   = arr[Math.min(5, arr.length - 1)] ?? null
+  return {
+    dP:              p0 != null && p5 != null ? p5 - p0 : 0,
+    hourlyPressure:  arr,
   }
 }
 

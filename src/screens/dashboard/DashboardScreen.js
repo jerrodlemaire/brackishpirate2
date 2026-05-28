@@ -1,33 +1,25 @@
-import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react'
+import React, { useState, useCallback, useEffect, useMemo } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  RefreshControl, Dimensions, PanResponder,
+  RefreshControl,
 } from 'react-native'
-import Svg, { Polyline, Path, Defs, LinearGradient, Stop } from 'react-native-svg'
-import * as Haptics from 'expo-haptics'
+import Svg, { Polyline } from 'react-native-svg'
 import { useNavigation } from '@react-navigation/native'
 import { Typography, Spacing, Radius } from '../../constants/theme'
 import { useTheme } from '../../hooks/useTheme'
-import { getSolunarForDate, buildActivityCurve, scoreColor, scoreLabel } from '../../utils/solunar'
+import { getSolunarForDate, buildCompositeCurve, peakWeightedAverage, scoreColor } from '../../utils/solunar'
+import ActivityGauge from '../../components/ActivityGauge'
 import { fetchTideHourly } from '../../utils/tides'
 import { fetchWeatherAndForecast, fetchMarineData, fetchWaterTemp, windDir, getWindColor } from '../../utils/weather'
-import { smoothBezierPath, smoothAreaPath } from '../../utils/chart'
 import JollyRoger from '../../components/JollyRoger'
 import WindCompass from '../../components/WindCompass'
 import HomePortPicker from '../../components/HomePortPicker'
 import { useApp } from '../../context/AppContext'
 import { useDataLocation } from '../../hooks/useDataLocation'
 
-const { width } = Dimensions.get('window')
-
-const CHART_W = width - 32
-const CHART_H = 220
-const PAD_L   = 40
-const PAD_R   = 12
-const PAD_T   = 16
-const PAD_B   = 28
-const PLOT_W  = CHART_W - PAD_L - PAD_R
-const PLOT_H  = CHART_H - PAD_T - PAD_B
+function shortTime(t) {
+  return t.replace(' AM', 'a').replace(' PM', 'p')
+}
 
 function MiniSparkline({ values, color, h = 28, w = 88 }) {
   const filtered = (values || []).filter(v => v != null && !isNaN(v))
@@ -49,70 +41,6 @@ function MiniSparkline({ values, color, h = 28, w = 88 }) {
   )
 }
 
-function ActivityWave({ sol, scrubIdx, Colors }) {
-  const curve = buildActivityCurve(sol)
-  const stepX = PLOT_W / (curve.length - 1)
-  const toY   = (v) => PAD_T + PLOT_H - (v / 100) * PLOT_H
-  const pts   = curve.map((v, i) => ({ x: PAD_L + i * stepX, y: toY(v), v }))
-  const nowX  = PAD_L + Math.min(new Date().getHours(), curve.length - 1) * stepX
-
-  const linePath = smoothBezierPath(pts)
-  const areaPath = smoothAreaPath(pts, CHART_H - PAD_B)
-
-  const windows = [
-    { startH: sol.major1.startH, endH: sol.major1.endH, major: true },
-    { startH: sol.major2.startH, endH: sol.major2.endH, major: true },
-    { startH: sol.minor1.startH, endH: sol.minor1.endH, major: false },
-    { startH: sol.minor2.startH, endH: sol.minor2.endH, major: false },
-  ]
-
-  const aw = useMemo(() => StyleSheet.create({
-    gridLbl:   { position: 'absolute', left: 0, width: PAD_L - 4, textAlign: 'right', fontSize: 11, fontWeight: 'bold', color: `${Colors.doubloonGold}8C` },
-    nowLine:   { position: 'absolute', top: PAD_T, bottom: PAD_B, width: 1.5, backgroundColor: Colors.brackishWater },
-    scrubLine: { position: 'absolute', top: PAD_T, bottom: PAD_B, width: 1, backgroundColor: Colors.doubloonGold, opacity: 0.8 },
-    xLbl:      { position: 'absolute', fontSize: 11, fontWeight: 'bold', color: `${Colors.doubloonGold}99` },
-  }), [Colors])
-
-  return (
-    <View style={{ height: CHART_H, width: CHART_W }}>
-      <Svg width={CHART_W} height={CHART_H} style={StyleSheet.absoluteFillObject}>
-        <Defs>
-          <LinearGradient id="actGrad" x1="0" y1="0" x2="0" y2="1">
-            <Stop offset="0" stopColor={Colors.doubloonGold} stopOpacity="0.45"/>
-            <Stop offset="1" stopColor={Colors.doubloonGold} stopOpacity="0.02"/>
-          </LinearGradient>
-        </Defs>
-        {windows.map((w, i) => {
-          const x1 = PAD_L + (w.startH / 24) * PLOT_W
-          const x2 = PAD_L + (Math.min(w.endH, 24) / 24) * PLOT_W
-          return (
-            <Path key={i}
-              d={`M ${x1},${PAD_T} L ${x2},${PAD_T} L ${x2},${CHART_H-PAD_B} L ${x1},${CHART_H-PAD_B} Z`}
-              fill={w.major ? 'rgba(196,154,42,0.14)' : 'rgba(196,154,42,0.07)'}
-            />
-          )
-        })}
-        <Path d={areaPath} fill="url(#actGrad)"/>
-        <Path d={linePath} fill="none" stroke={Colors.doubloonGold} strokeWidth="2.5"
-          strokeLinecap="round" strokeLinejoin="round"/>
-      </Svg>
-
-      {[0, 50, 100].map((v, i) => (
-        <Text key={i} style={[aw.gridLbl, { top: toY(v) - 6 }]}>{v}</Text>
-      ))}
-      <View style={[aw.nowLine, { left: nowX }]}/>
-      {scrubIdx !== null && (
-        <View style={[aw.scrubLine, { left: pts[scrubIdx].x }]}/>
-      )}
-      {['12a', '6a', '12p', '6p', '12a'].map((l, i) => (
-        <Text key={i} style={[aw.xLbl, {
-          left: PAD_L + (PLOT_W / 4) * i - 6,
-          top:  CHART_H - PAD_B + 4,
-        }]}>{l}</Text>
-      ))}
-    </View>
-  )
-}
 
 // ── Screen ────────────────────────────────────────────────────────────────────
 export default function DashboardScreen({ pagerRef }) {
@@ -122,18 +50,15 @@ export default function DashboardScreen({ pagerRef }) {
   const { buoy }            = useDataLocation()
   const [showPicker,   setShowPicker]   = useState(false)
   const [refreshing,   setRefreshing]   = useState(false)
-  const [scrubIdx,     setScrubIdx]     = useState(null)
-  const lastHaptic = useRef(-1)
 
   const [weather,    setWeather]    = useState(null)
   const [marine,     setMarine]     = useState(null)
   const [waterTemp,  setWaterTemp]  = useState(null)
   const [hourlyTide, setHourlyTide] = useState([])
 
-  const sol      = getSolunarForDate(new Date())
-  const curve    = buildActivityCurve(sol)
-  const stepX    = PLOT_W / (curve.length - 1)
-  const actScore = sol.activityScore
+  const sol         = getSolunarForDate(new Date(), homePort.lat, homePort.lng)
+  const curve       = useMemo(() => buildCompositeCurve(sol, hourlyTide, 0), [sol, hourlyTide])
+  const fishScore   = useMemo(() => peakWeightedAverage(curve), [curve])
 
   const loadData = useCallback(async () => {
     try {
@@ -161,43 +86,15 @@ export default function DashboardScreen({ pagerRef }) {
     loadData()
   }, [loadData])
 
-  const getIdx = (x) => {
-    const rel = x - PAD_L
-    return Math.max(0, Math.min(curve.length - 1, Math.round(rel / stepX)))
-  }
-
-  const pan = PanResponder.create({
-    onStartShouldSetPanResponder: () => false,
-    onMoveShouldSetPanResponder: (_e, g) =>
-      Math.abs(g.dx) > 6 && Math.abs(g.dx) > Math.abs(g.dy),
-    onMoveShouldSetPanResponderCapture: (_e, g) =>
-      Math.abs(g.dx) > 6 && Math.abs(g.dx) > Math.abs(g.dy),
-    onPanResponderGrant: (e) => {
-      const i = getIdx(e.nativeEvent.locationX)
-      setScrubIdx(i)
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
-      lastHaptic.current = i
-    },
-    onPanResponderMove: (e) => {
-      const i = getIdx(e.nativeEvent.locationX)
-      setScrubIdx(i)
-      if (i !== lastHaptic.current) {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
-        lastHaptic.current = i
-      }
-    },
-    onPanResponderRelease: () => { setTimeout(() => setScrubIdx(null), 2000) },
-  })
-
   // ── Derived values ──────────────────────────────────────────────────────────
   const nowHour    = new Date().getHours()
   const curTide    = hourlyTide[nowHour]     ? parseFloat(hourlyTide[nowHour].v)     : null
   const prevTide   = hourlyTide[nowHour - 1] ? parseFloat(hourlyTide[nowHour - 1].v) : null
   const tideRising = curTide !== null && prevTide !== null && curTide > prevTide
 
-  const airTemp    = weather ? Math.round(weather.current.temperature_2m)  : null
-  const windSpd    = weather ? Math.round(weather.current.windspeed_10m)   : null
-  const windDirStr = weather ? windDir(weather.current.winddirection_10m)  : ''
+  const airTemp    = weather?.current ? Math.round(weather.current.temperature_2m)  : null
+  const windSpd    = weather?.current ? Math.round(weather.current.windspeed_10m)   : null
+  const windDirStr = weather?.current ? windDir(weather.current.winddirection_10m)  : ''
   const waveHt     = marine?.current?.wave_height != null ? marine.current.wave_height.toFixed(1) : null
   const waveDirStr = marine?.current?.wave_direction != null ? windDir(marine.current.wave_direction) : ''
   const todayHigh  = weather?.daily?.temperature_2m_max?.[0]
@@ -208,8 +105,6 @@ export default function DashboardScreen({ pagerRef }) {
   const windSpark  = weather?.hourlyWindSpeeds?.length > 0 ? weather.hourlyWindSpeeds : null
   const tempSpark  = weather?.hourlyTemps?.length > 0 ? weather.hourlyTemps : null
 
-  const displayScore = scrubIdx !== null ? curve[scrubIdx] : actScore
-  const displayLabel = scrubIdx !== null ? scoreLabel(curve[scrubIdx]) : scoreLabel(actScore)
   const displayName  = homePort.name.length > 28 ? homePort.name.slice(0, 26) + '…' : homePort.name
 
   const THEME_OPTS = [
@@ -252,11 +147,6 @@ export default function DashboardScreen({ pagerRef }) {
     dataCardVal:   { fontSize: Typography.lg, fontWeight: '700', fontFamily: 'Georgia' },
     dataCardSub:   { fontSize: Typography.xs, color: Colors.textSecondary, marginBottom: 6 },
 
-    chartCard:  { backgroundColor: Colors.deepSea, marginHorizontal: 12, borderRadius: Radius.lg, padding: Spacing.md, marginBottom: Spacing.md },
-    chartHd:    { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
-    chartTitle: { fontSize: Typography.xs, color: Colors.textSecondary, fontWeight: '500', letterSpacing: 0.5 },
-    chartScore: { fontSize: Typography.sm, fontWeight: '700' },
-
     utilityGrid: { flexDirection: 'row', paddingHorizontal: 12, gap: Spacing.sm, marginBottom: Spacing.md },
     utilityCard: { flex: 1, backgroundColor: Colors.cardBg, borderRadius: Radius.lg, borderWidth: 0.5, borderColor: Colors.border, padding: Spacing.md, alignItems: 'center', gap: 4 },
     utilityIcon: { fontSize: 22 },
@@ -289,7 +179,7 @@ export default function DashboardScreen({ pagerRef }) {
             {homePort.lat.toFixed(4)}° N · {Math.abs(homePort.lng).toFixed(4)}° W
           </Text>
           <View style={s.heroStatInline}>
-            <Text style={[s.heroStatVal, { color: scoreColor(actScore) }]}>{actScore}/100</Text>
+            <Text style={[s.heroStatVal, { color: scoreColor(fishScore) }]}>{fishScore}/100</Text>
             <Text style={s.heroStatSep}>·</Text>
             <Text style={s.heroStatVal}>{sol.moonPhase.emoji}</Text>
             <Text style={s.heroStatSep}>·</Text>
@@ -313,22 +203,26 @@ export default function DashboardScreen({ pagerRef }) {
       {/* CONDITION DATA CARDS 2×3 */}
       <View style={s.cardGrid}>
         {/* Row 1 */}
-        <TouchableOpacity style={[s.dataCard, s.dataCardTeal]} onPress={() => pagerRef?.current?.setPage(1)} activeOpacity={0.8}>
+        <TouchableOpacity style={[s.dataCard, s.dataCardGold]} onPress={() => pagerRef?.current?.setPage(1)} activeOpacity={0.8}>
+          <Text style={s.dataCardLabel}>FISH ACTIVITY</Text>
+          <ActivityGauge score={fishScore} Colors={Colors} size={96}/>
+          <Text style={{ fontSize: 9, color: Colors.doubloonGold, fontWeight: '700', marginTop: 4 }}>
+            MAJ {shortTime(sol.major1.start)} · {shortTime(sol.major2.start)}
+          </Text>
+          <Text style={{ fontSize: 9, color: Colors.brackishWater, fontWeight: '700' }}>
+            MIN {shortTime(sol.minor1.start)} · {shortTime(sol.minor2.start)}
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={[s.dataCard, s.dataCardTeal]} onPress={() => pagerRef?.current?.setPage(2)} activeOpacity={0.8}>
           <Text style={s.dataCardLabel}>TIDES</Text>
           <Text style={[s.dataCardVal, { color: Colors.brackishWater }]}>{curTide !== null ? `${curTide.toFixed(2)} ft` : '—'}</Text>
           <Text style={s.dataCardSub}>{curTide !== null ? (tideRising ? 'Incoming ↑' : 'Outgoing ↓') : 'Loading…'}</Text>
           <MiniSparkline values={tideSpark} color={Colors.brackishWater}/>
         </TouchableOpacity>
 
-        <TouchableOpacity style={[s.dataCard, s.dataCardGold]} onPress={() => pagerRef?.current?.setPage(2)} activeOpacity={0.8}>
-          <Text style={s.dataCardLabel}>SOLUNAR</Text>
-          <Text style={[s.dataCardVal, { color: scoreColor(actScore) }]}>{actScore}/100</Text>
-          <Text style={[s.dataCardSub, { color: scoreColor(actScore) }]}>{scoreLabel(actScore)}</Text>
-          <MiniSparkline values={curve.slice(0, 24)} color={Colors.doubloonGold}/>
-        </TouchableOpacity>
-
         {/* Row 2 */}
-        <TouchableOpacity style={[s.dataCard, s.dataCardTeal]} onPress={() => pagerRef?.current?.setPage(3)} activeOpacity={0.8}>
+        <TouchableOpacity style={[s.dataCard, s.dataCardTeal]} onPress={() => pagerRef?.current?.setPage(4)} activeOpacity={0.8}>
           <Text style={s.dataCardLabel}>WIND</Text>
           <Text style={[s.dataCardVal, { color: windSpd !== null ? getWindColor(windSpd) : Colors.brackishWater }]}>{windSpd !== null ? `${windSpd} mph` : '—'}</Text>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 6 }}>
@@ -340,7 +234,7 @@ export default function DashboardScreen({ pagerRef }) {
           <MiniSparkline values={windSpark} color={windSpd !== null ? getWindColor(windSpd) : Colors.brackishWater}/>
         </TouchableOpacity>
 
-        <TouchableOpacity style={[s.dataCard, s.dataCardTeal]} onPress={() => pagerRef?.current?.setPage(4)} activeOpacity={0.8}>
+        <TouchableOpacity style={[s.dataCard, s.dataCardTeal]} onPress={() => pagerRef?.current?.setPage(5)} activeOpacity={0.8}>
           <Text style={s.dataCardLabel}>WAVES</Text>
           <Text style={[s.dataCardVal, { color: Colors.brackishWater }]}>{waveHt !== null ? `${waveHt} ft` : '—'}</Text>
           <Text style={s.dataCardSub}>{waveHt !== null ? `${waveDirStr} swell` : 'Loading…'}</Text>
@@ -348,37 +242,18 @@ export default function DashboardScreen({ pagerRef }) {
         </TouchableOpacity>
 
         {/* Row 3 */}
-        <TouchableOpacity style={[s.dataCard, s.dataCardGreen]} onPress={() => pagerRef?.current?.setPage(5)} activeOpacity={0.8}>
+        <TouchableOpacity style={[s.dataCard, s.dataCardGreen]} onPress={() => pagerRef?.current?.setPage(6)} activeOpacity={0.8}>
           <Text style={s.dataCardLabel}>AIR TEMP</Text>
           <Text style={[s.dataCardVal, { color: Colors.marshGreen }]}>{airTemp !== null ? `${airTemp}°F` : '—'}</Text>
           <Text style={s.dataCardSub}>{todayHigh != null && todayLow != null ? `H ${Math.round(todayHigh)}° · L ${Math.round(todayLow)}°` : 'Loading…'}</Text>
           <MiniSparkline values={tempSpark} color={Colors.marshGreen}/>
         </TouchableOpacity>
 
-        <TouchableOpacity style={[s.dataCard, s.dataCardTeal]} onPress={() => pagerRef?.current?.setPage(5)} activeOpacity={0.8}>
+        <TouchableOpacity style={[s.dataCard, s.dataCardTeal]} onPress={() => pagerRef?.current?.setPage(6)} activeOpacity={0.8}>
           <Text style={s.dataCardLabel}>WATER TEMP</Text>
           <Text style={[s.dataCardVal, { color: Colors.brackishWater }]}>{waterTemp !== null ? `${Math.round(waterTemp)}°F` : '—'}</Text>
           <Text style={s.dataCardSub}>Surface · NOAA</Text>
         </TouchableOpacity>
-      </View>
-
-      {/* FISH ACTIVITY WAVE */}
-      <View style={s.chartCard}>
-        <View style={s.chartHd}>
-          <Text style={s.chartTitle}>Fish activity today</Text>
-          <Text style={[s.chartScore, { color: scoreColor(displayScore) }]}>
-            {displayScore} · {displayLabel}
-          </Text>
-        </View>
-        <View
-          onTouchStart={(e) => {
-            const i = getIdx(e.nativeEvent.locationX)
-            setScrubIdx(i)
-          }}
-          {...pan.panHandlers}
-        >
-          <ActivityWave sol={sol} scrubIdx={scrubIdx} Colors={Colors}/>
-        </View>
       </View>
 
       {/* UTILITY TILES */}

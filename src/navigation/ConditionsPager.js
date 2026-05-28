@@ -6,6 +6,7 @@ import { useTheme } from '../hooks/useTheme'
 import SegmentedStrip from '../components/SegmentedStrip'
 
 import DashboardScreen from '../screens/dashboard/DashboardScreen'
+import FishActivityScreen from '../screens/fishactivity/FishActivityScreen'
 import TidesScreen from '../screens/tides/TidesScreen'
 import SolunarScreen from '../screens/tides/SolunarScreen'
 import WindScreen from '../screens/wind/WindScreen'
@@ -14,13 +15,14 @@ import WeatherScreen from '../screens/weather/WeatherScreen'
 import RiverScreen from '../screens/river/RiverScreen'
 
 const PAGES = [
-  { key: 'home',    label: 'Home Port' },
-  { key: 'tides',   label: 'Tides'     },
-  { key: 'solunar', label: 'Solunar'   },
-  { key: 'wind',    label: 'Wind'      },
-  { key: 'waves',   label: 'Waves'     },
-  { key: 'weather', label: 'Weather'   },
-  { key: 'rivers',  label: 'Rivers'    },
+  { key: 'home',     label: 'Home Port'     },
+  { key: 'fish',     label: 'Fish Activity' },
+  { key: 'tides',    label: 'Tides'         },
+  { key: 'solunar',  label: 'Solunar'       },
+  { key: 'wind',     label: 'Wind'          },
+  { key: 'waves',    label: 'Waves'         },
+  { key: 'weather',  label: 'Weather'       },
+  { key: 'rivers',   label: 'Rivers'        },
 ]
 
 export default function ConditionsPager() {
@@ -49,21 +51,24 @@ export default function ConditionsPager() {
           <DashboardScreen pagerRef={pagerRef}/>
         </View>
         <View key="1" style={s.page}>
-          <TidesScreen/>
+          <FishActivityScreen/>
         </View>
         <View key="2" style={s.page}>
-          <SolunarScreen/>
+          <TidesScreen/>
         </View>
         <View key="3" style={s.page}>
-          <WindScreen/>
+          <SolunarScreen/>
         </View>
         <View key="4" style={s.page}>
-          <WavesScreen/>
+          <WindScreen/>
         </View>
         <View key="5" style={s.page}>
-          <WeatherScreen/>
+          <WavesScreen/>
         </View>
         <View key="6" style={s.page}>
+          <WeatherScreen/>
+        </View>
+        <View key="7" style={s.page}>
           <RiverScreen/>
         </View>
       </PagerView>
