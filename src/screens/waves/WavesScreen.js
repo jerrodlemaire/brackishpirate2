@@ -167,8 +167,8 @@ function WavesDayStrip({ dailyMax, selectedIdx, onSelect }) {
 
   const dws = useMemo(() => StyleSheet.create({
     scroll:  { backgroundColor: Colors.topbarBg },
-    content: { paddingHorizontal: 12, paddingVertical: 10, gap: 6 },
-    pill:    { width: 58, alignItems: 'center', paddingTop: 8, paddingBottom: 16, borderRadius: Radius.md, borderWidth: 0.5, borderColor: 'rgba(255,255,255,0.15)', backgroundColor: 'rgba(255,255,255,0.04)', gap: 2 },
+    content: { paddingHorizontal: 12, paddingVertical: 10, gap: 6, alignItems: 'center' },
+    pill:    { width: 62, alignItems: 'center', paddingTop: 8, paddingBottom: 14, borderRadius: Radius.md, borderWidth: 0.5, borderColor: 'rgba(255,255,255,0.15)', backgroundColor: 'rgba(255,255,255,0.04)', gap: 4 },
     pillSel: { backgroundColor: `${Colors.brackishWater}59`, borderColor: Colors.brackishWater },
     label:   { fontSize: 9, color: 'rgba(255,255,255,0.7)', fontWeight: '600', letterSpacing: 0.3 },
     num:     { fontSize: Typography.md, fontWeight: '700', color: '#fff' },
@@ -355,7 +355,30 @@ export default function WavesScreen() {
               <WaveChart waves={hourlyWaves}/>
             </View>
 
-            {/* NDBC buoy observations — moved up before 7-day */}
+            {/* 7-day max waves — directly below chart */}
+            {dailyMax.length > 0 && (
+              <View style={s.card}>
+                <Text style={s.cardTitle}>7-day wave forecast</Text>
+                <View style={s.dailyGrid}>
+                  {dailyMax.map((h, i) => {
+                    const date = new Date()
+                    date.setDate(date.getDate() + i)
+                    const day = i === 0 ? 'Today' : date.toLocaleDateString('en-US', { weekday: 'short' })
+                    const barH = Math.max(6, (h / Math.max(...dailyMax)) * 60)
+                    return (
+                      <View key={i} style={s.dayCol}>
+                        <Text style={s.dayWave}>{h != null ? h.toFixed(1) : '—'}</Text>
+                        <Text style={s.dayWaveUnit}>ft</Text>
+                        <View style={[s.dayBar, { height: barH, backgroundColor: Colors.brackishWater }]}/>
+                        <Text style={[s.dayName, i === 0 && s.dayToday]}>{day}</Text>
+                      </View>
+                    )
+                  })}
+                </View>
+              </View>
+            )}
+
+            {/* NDBC buoy observations */}
             {ndbcObs && (
               <View style={s.card}>
                 <Text style={s.cardTitle}>NDBC buoy {buoy.id}</Text>
@@ -375,29 +398,6 @@ export default function WavesScreen() {
                       <Text style={s.obsVal}>{c.val}</Text>
                     </View>
                   ))}
-                </View>
-              </View>
-            )}
-
-            {/* 7-day max waves */}
-            {dailyMax.length > 0 && (
-              <View style={s.card}>
-                <Text style={s.cardTitle}>7-day wave forecast</Text>
-                <View style={s.dailyGrid}>
-                  {dailyMax.map((h, i) => {
-                    const date = new Date()
-                    date.setDate(date.getDate() + i)
-                    const day = i === 0 ? 'Today' : date.toLocaleDateString('en-US', { weekday: 'short' })
-                    const barH = Math.max(6, (h / Math.max(...dailyMax)) * 60)
-                    return (
-                      <View key={i} style={s.dayCol}>
-                        <Text style={s.dayWave}>{h != null ? h.toFixed(1) : '—'}</Text>
-                        <Text style={s.dayWaveUnit}>ft</Text>
-                        <View style={[s.dayBar, { height: barH, backgroundColor: Colors.brackishWater }]}/>
-                        <Text style={[s.dayName, i === 0 && s.dayToday]}>{day}</Text>
-                      </View>
-                    )
-                  })}
                 </View>
               </View>
             )}

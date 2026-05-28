@@ -4,7 +4,7 @@ import {
   ActivityIndicator, RefreshControl, Dimensions, PanResponder, Modal, Animated,
 } from 'react-native'
 import MapView, { UrlTile, PROVIDER_GOOGLE } from 'react-native-maps'
-import Svg, { Path, Defs, LinearGradient, Stop } from 'react-native-svg'
+import Svg, { Path, Circle, Defs, LinearGradient, Stop } from 'react-native-svg'
 import * as Haptics from 'expo-haptics'
 import WindCompass from '../../components/WindCompass'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -365,13 +365,82 @@ function TempChart({ temps }) {
   )
 }
 
+// ── Wind sparkline for hero card ──────────────────────────────────────────
+const WIND_HOUR_MARKS = [
+  { idx: 0,  label: '12a' },
+  { idx: 4,  label: '4a'  },
+  { idx: 8,  label: '8a'  },
+  { idx: 12, label: '12p' },
+  { idx: 16, label: '4p'  },
+  { idx: 20, label: '8p'  },
+  { idx: 23, label: '12a' },
+]
+const SPARK_PAD = Spacing.lg * 2 + Spacing.md * 2  // content + card padding each side
+
+function HeroWindSparkline({ speeds }) {
+  const { Colors } = useTheme()
+  const sparkW = Math.max(60, width - SPARK_PAD)
+  const sparkH = 36
+  const valid  = (speeds || []).slice(0, 24).filter(v => v != null && !isNaN(v))
+  if (valid.length < 2) return null
+  const min  = Math.min(...valid)
+  const max  = Math.max(...valid)
+  const rng  = max - min || 1
+  const step = sparkW / (valid.length - 1)
+  const toX  = (i) => i * step
+  const toY  = (v) => sparkH - ((v - min) / rng) * sparkH * 0.80 - sparkH * 0.10
+  const pathD = valid.map((v, i) => `${i === 0 ? 'M' : 'L'} ${toX(i).toFixed(1)},${toY(v).toFixed(1)}`).join(' ')
+  return (
+    <View>
+      <View style={{ height: 14 }}>
+        {WIND_HOUR_MARKS.map(({ idx, label }) => {
+          if (idx >= valid.length) return null
+          const x = toX(idx)
+          const spd = valid[idx]
+          return (
+            <Text key={label + idx} style={{
+              position: 'absolute', left: x - 14, width: 28, textAlign: 'center',
+              fontSize: 8, fontWeight: '700', color: getWindColor(spd),
+            }}>{Math.round(spd)}</Text>
+          )
+        })}
+      </View>
+      <Svg width={sparkW} height={sparkH}>
+        <Path d={pathD} fill="none" stroke={Colors.brackishWater} strokeWidth="1.5"
+          strokeLinecap="round" strokeLinejoin="round"/>
+        {WIND_HOUR_MARKS.map(({ idx, label }) => {
+          if (idx >= valid.length) return null
+          const x = toX(idx)
+          const y = toY(valid[idx])
+          return (
+            <Circle key={label + idx} cx={x.toFixed(1)} cy={y.toFixed(1)} r="2.5"
+              fill={getWindColor(valid[idx])} stroke={Colors.deepSea} strokeWidth="0.5"/>
+          )
+        })}
+      </Svg>
+      <View style={{ height: 14 }}>
+        {WIND_HOUR_MARKS.map(({ idx, label }) => {
+          if (idx >= valid.length) return null
+          const x = toX(idx)
+          return (
+            <Text key={label + idx} style={{
+              position: 'absolute', left: x - 14, width: 28, textAlign: 'center',
+              fontSize: 8, color: Colors.textMuted,
+            }}>{label}</Text>
+          )
+        })}
+      </View>
+    </View>
+  )
+}
+
 // ── 10-day weather strip ──────────────────────────────────────────────────
 function WeatherDayStrip({ daily, selectedIdx, onSelect }) {
   const { Colors } = useTheme()
   const wds = useMemo(() => StyleSheet.create({
     scroll:  { backgroundColor: Colors.topbarBg },
     content: { paddingHorizontal: 12, paddingVertical: 10, gap: 6 },
-    pill:    { width: 58, alignItems: 'center', paddingVertical: 8, borderRadius: Radius.md, borderWidth: 0.5, borderColor: 'rgba(255,255,255,0.15)', backgroundColor: 'rgba(255,255,255,0.04)', gap: 2 },
+    pill:    { width: 68, alignItems: 'center', paddingVertical: 8, borderRadius: Radius.md, borderWidth: 0.5, borderColor: 'rgba(255,255,255,0.15)', backgroundColor: 'rgba(255,255,255,0.04)', gap: 2 },
     pillSel: { backgroundColor: `${Colors.brackishWater}59`, borderColor: Colors.brackishWater },
     label:   { fontSize: 9, color: 'rgba(255,255,255,0.7)', fontWeight: '600', letterSpacing: 0.3 },
     num:     { fontSize: Typography.md, fontWeight: '700', color: '#fff' },
@@ -534,6 +603,13 @@ export default function WeatherScreen() {
                 )}
               </View>
 
+              {/* Hourly wind sparkline — today only */}
+              {isToday && weather?.hourlyWindSpeeds?.length > 0 && (
+                <View style={s.heroSparkRow}>
+                  <Text style={s.heroSparkLbl}>WIND SPEED (MPH)</Text>
+                  <HeroWindSparkline speeds={weather.hourlyWindSpeeds}/>
+                </View>
+              )}
             </View>
 
             {/* Live radar */}

@@ -138,7 +138,7 @@ export default function DashboardScreen({ pagerRef }) {
     themeTxtOn: { color: Colors.doubloonGold, fontWeight: '700' },
 
     cardGrid:      { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 12, gap: Spacing.sm, marginBottom: Spacing.md },
-    dataCard:      { width: '47.5%', backgroundColor: Colors.cardBg, borderRadius: Radius.lg, borderTopWidth: 3, borderBottomWidth: 0.5, borderLeftWidth: 0.5, borderRightWidth: 0.5, borderBottomColor: Colors.border, borderLeftColor: Colors.border, borderRightColor: Colors.border, padding: Spacing.md, gap: 1 },
+    dataCard:      { width: '47.5%', backgroundColor: Colors.cardBg, borderRadius: Radius.lg, borderTopWidth: 3, borderTopColor: Colors.border, borderBottomWidth: 0.5, borderLeftWidth: 0.5, borderRightWidth: 0.5, borderBottomColor: Colors.border, borderLeftColor: Colors.border, borderRightColor: Colors.border, padding: Spacing.md, gap: 1 },
     dataCardTeal:  { borderTopColor: '#4A8FA8' },
     dataCardGold:  { borderTopColor: Colors.doubloonGold },
     dataCardGreen: { borderTopColor: Colors.marshGreen },
