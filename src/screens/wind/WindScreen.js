@@ -26,61 +26,6 @@ const PLOT_H  = CHART_H - PAD_T - PAD_B
 
 const HOURS = ['12a', '3a', '6a', '9a', '12p', '3p', '6p', '9p']
 
-const SPARK_TIME_MARKS = [
-  { label: '12a', idx: 0 },
-  { label: '4a',  idx: 4 },
-  { label: '8a',  idx: 8 },
-  { label: '12p', idx: 12 },
-  { label: '4p',  idx: 16 },
-  { label: '8p',  idx: 20 },
-  { label: '12a', idx: 23 },
-]
-
-function WindSparklineLabeled({ speeds, color }) {
-  const { Colors } = useTheme()
-  const sparkH = 28
-  const filtered = (speeds || []).filter(v => v != null && !isNaN(v))
-  if (filtered.length < 2) return null
-  const w = width - 56
-  const max = Math.max(...filtered, 5)
-  const pts = filtered.map((v, i) => {
-    const x = (i / (filtered.length - 1)) * w
-    const y = sparkH - (v / max) * sparkH * 0.8 - sparkH * 0.1
-    return `${x.toFixed(1)},${y.toFixed(1)}`
-  }).join(' ')
-  return (
-    <View style={{ width: w }}>
-      <View style={{ height: 14, position: 'relative' }}>
-        {SPARK_TIME_MARKS.map(({ idx, label }) => {
-          const spd = filtered[idx] ?? null
-          if (spd == null) return null
-          const x = (idx / (filtered.length - 1)) * w
-          return (
-            <Text key={label + idx} style={{
-              position: 'absolute', left: Math.max(0, x - 12), fontSize: 8,
-              fontWeight: '700', color: getWindColor(spd), textAlign: 'center', width: 24,
-            }}>{Math.round(spd)}</Text>
-          )
-        })}
-      </View>
-      <Svg width={w} height={sparkH}>
-        <Path d={`M ${pts.split(' ').join(' L ')}`} fill="none" stroke={color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
-      </Svg>
-      <View style={{ height: 14, position: 'relative' }}>
-        {SPARK_TIME_MARKS.map(({ idx, label }) => {
-          const x = (idx / (filtered.length - 1)) * w
-          return (
-            <Text key={label + idx + 't'} style={{
-              position: 'absolute', left: Math.max(0, x - 10), fontSize: 8,
-              color: Colors.textMuted, fontWeight: '600', textAlign: 'center', width: 20,
-            }}>{label}</Text>
-          )
-        })}
-      </View>
-    </View>
-  )
-}
-
 function WindChart({ speeds, dirs }) {
   const { Colors } = useTheme()
   const [scrubIdx, setScrubIdx] = useState(null)
@@ -270,8 +215,10 @@ export default function WindScreen() {
   const wDirs   = weather?.hourlyWindDirs   || []
 
   const windSpd    = cur ? Math.round(cur.windspeed_10m) : null
+  const gustSpd    = cur?.windgusts_10m != null ? Math.round(cur.windgusts_10m) : null
   const windDirStr = cur ? windDir(cur.winddirection_10m) : ''
   const windColor  = windSpd !== null ? getWindColor(windSpd) : Colors.brackishWater
+  const gustColor  = gustSpd !== null ? getWindColor(gustSpd) : Colors.textPrimary
 
   const s = useMemo(() => StyleSheet.create({
     container: { flex: 1, backgroundColor: Colors.screenBg },
@@ -285,10 +232,11 @@ export default function WindScreen() {
     heroLeft:  { flex: 1 },
     heroLabel: { fontSize: Typography.xs, color: Colors.textSecondary, marginBottom: 2 },
     heroWind:  { fontSize: 52, fontWeight: '700', fontFamily: 'Georgia', lineHeight: 56 },
-    heroDir:   { fontSize: Typography.sm, color: Colors.textSecondary, marginTop: 2 },
+    heroDir:   { fontSize: Typography.sm, color: Colors.textSecondary, fontWeight: '600', marginTop: 6, textAlign: 'center' },
     heroRight: { alignItems: 'center', justifyContent: 'center', paddingLeft: 12 },
-    heroSparkRow: { marginTop: 10, borderTopWidth: 0.5, borderTopColor: Colors.border, paddingTop: 10 },
-    heroSparkLbl: { fontSize: 9, color: Colors.textSecondary, letterSpacing: 0.3, marginBottom: 6 },
+    heroStatRow:   { marginTop: 12, borderTopWidth: 0.5, borderTopColor: Colors.border, paddingTop: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+    heroStatLabel: { fontSize: Typography.sm, color: Colors.textSecondary, fontWeight: '600', letterSpacing: 0.5 },
+    heroStatVal:   { fontSize: 24, fontWeight: '700', fontFamily: 'Georgia' },
     card:      { backgroundColor: Colors.cardBg, borderRadius: Radius.lg, borderWidth: 0.5, borderColor: Colors.border, padding: Spacing.lg },
     cardTitle: { fontSize: Typography.base, fontWeight: '600', color: Colors.textPrimary, marginBottom: 2 },
     cardSub:   { fontSize: Typography.xs, color: Colors.textMuted, marginBottom: 14 },
@@ -319,20 +267,20 @@ export default function WindScreen() {
                   <Text style={[s.heroWind, { color: windColor }]}>
                     {windSpd !== null ? `${windSpd} mph` : '—'}
                   </Text>
-                  <Text style={s.heroDir}>{windDirStr || weatherLocation.name}</Text>
                 </View>
                 <View style={s.heroRight}>
                   {cur?.winddirection_10m != null && (
-                    <WindCompass deg={cur.winddirection_10m} size={56} color={windColor}/>
+                    <WindCompass deg={cur.winddirection_10m} size={56} color={windColor} strokeWidth={4.5}/>
                   )}
+                  {windDirStr ? <Text style={s.heroDir}>{windDirStr}</Text> : null}
                 </View>
               </View>
-              {wSpeeds.length > 0 && (
-                <View style={s.heroSparkRow}>
-                  <Text style={s.heroSparkLbl}>HOURLY WIND SPEED (mph)</Text>
-                  <WindSparklineLabeled speeds={wSpeeds} color={windColor}/>
-                </View>
-              )}
+              <View style={s.heroStatRow}>
+                <Text style={s.heroStatLabel}>GUSTS</Text>
+                <Text style={[s.heroStatVal, { color: gustColor }]}>
+                  {gustSpd !== null ? `${gustSpd} mph` : '—'}
+                </Text>
+              </View>
             </View>
 
             <View style={[s.card, { paddingHorizontal: 0, overflow: 'hidden' }]}>

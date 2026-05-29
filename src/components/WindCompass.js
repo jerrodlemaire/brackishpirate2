@@ -2,7 +2,7 @@ import React from 'react'
 import { View } from 'react-native'
 import Svg, { Circle, Line, Polyline, Text as SvgText } from 'react-native-svg'
 
-export default function WindCompass({ deg, size = 18, color = '#4A8FA8' }) {
+export default function WindCompass({ deg, size = 18, color = '#4A8FA8', strokeWidth = 2.5 }) {
   if (deg == null) return <View style={{ width: size, height: size }}/>
   const rad       = (deg - 90) * Math.PI / 180
   const cx = size / 2, cy = size / 2
@@ -20,10 +20,10 @@ export default function WindCompass({ deg, size = 18, color = '#4A8FA8' }) {
   const nFontSize = Math.max(size * 0.28, 5)
   return (
     <Svg width={size} height={size}>
-      <Circle cx={cx} cy={cy} r={r} fill="none" stroke={color} strokeWidth="0.8" opacity="0.4"/>
+      <Circle cx={cx} cy={cy} r={r} fill="none" stroke={color} strokeWidth="1.5" opacity="0.4"/>
       <SvgText x={cx} y={cy - r + nFontSize * 0.85} textAnchor="middle" fontSize={nFontSize} fontWeight="700" fill={color} opacity="0.6">N</SvgText>
-      <Line x1={bx} y1={by} x2={tx} y2={ty} stroke={color} strokeWidth="1.4" strokeLinecap="round"/>
-      <Polyline points={`${w1x},${w1y} ${tx},${ty} ${w2x},${w2y}`} fill="none" stroke={color} strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+      <Line x1={bx} y1={by} x2={tx} y2={ty} stroke={color} strokeWidth={strokeWidth} strokeLinecap="round"/>
+      <Polyline points={`${w1x},${w1y} ${tx},${ty} ${w2x},${w2y}`} fill="none" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round"/>
     </Svg>
   )
 }
