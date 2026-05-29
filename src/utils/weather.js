@@ -25,13 +25,13 @@ export function windDir(deg) {
 }
 
 export function getWindColor(speed) {
-  if (speed >= 16) return '#E24B4A'  // red — rough
-  if (speed >= 11) return '#C49A2A'  // gold — moderate
-  return '#2E8B5A'                   // green — calm
+  if (speed >= 16) return '#E24B4A'  // danger
+  if (speed >= 11) return '#C49A2A'  // catFish / warning-gold
+  return '#5DCAA5'                   // trendUp / calm
 }
 
 export async function fetchWeatherAndForecast(lat = LAT, lng = LNG) {
-  const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current=temperature_2m,windspeed_10m,winddirection_10m,weathercode&hourly=temperature_2m,windspeed_10m,winddirection_10m&daily=temperature_2m_max,temperature_2m_min,windspeed_10m_max,winddirection_10m_dominant,precipitation_probability_max,weathercode&temperature_unit=fahrenheit&windspeed_unit=mph&timezone=America%2FChicago&forecast_days=10`
+  const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current=temperature_2m,apparent_temperature,windspeed_10m,winddirection_10m,weathercode&hourly=temperature_2m,windspeed_10m,winddirection_10m&daily=temperature_2m_max,temperature_2m_min,windspeed_10m_max,winddirection_10m_dominant,precipitation_probability_max,weathercode&temperature_unit=fahrenheit&windspeed_unit=mph&timezone=America%2FChicago&forecast_days=10`
   const res  = await fetch(url)
   const data = await res.json()
   if (!data.current) throw new Error('Weather API unavailable')

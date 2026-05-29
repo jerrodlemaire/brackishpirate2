@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react'
+import React, { useRef, useEffect, useMemo } from 'react'
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native'
 import { Radius, Typography } from '../constants/theme'
 import { useTheme } from '../hooks/useTheme'
@@ -17,6 +17,29 @@ export default function SegmentedStrip({ pages, activeIndex, onSelect, topInset 
     }
   }, [activeIndex])
 
+  const s = useMemo(() => StyleSheet.create({
+    container: { width: '100%' },
+    content: {
+      paddingHorizontal: 10,
+      paddingVertical: 8,
+      gap: 6,
+      alignItems: 'center',
+    },
+    chip: {
+      paddingHorizontal: 14,
+      paddingVertical: 7,
+      borderRadius: Radius.full,
+    },
+    chipTxt: {
+      fontSize: Typography.sm,
+      fontWeight: '500',
+    },
+    chipTxtActive: {
+      color: Colors.deepSea,
+      fontWeight: '600',
+    },
+  }), [Colors])
+
   return (
     <View style={[s.container, { paddingTop: topInset, backgroundColor: Colors.topbarBg }]}>
       <ScrollView
@@ -34,9 +57,9 @@ export default function SegmentedStrip({ pages, activeIndex, onSelect, topInset 
               onLayout={(e) => { chipLayouts.current[i] = e.nativeEvent.layout }}
               onPress={() => onSelect(i)}
               activeOpacity={0.75}
-              style={[s.chip, active && { backgroundColor: Colors.doubloonGold }]}
+              style={[s.chip, active && { backgroundColor: Colors.accent }]}
             >
-              <Text style={[s.chipTxt, active ? s.chipTxtActive : { color: 'rgba(255,255,255,0.45)' }]}>
+              <Text style={[s.chipTxt, active ? s.chipTxtActive : { color: Colors.textSecondary }]}>
                 {page.label}
               </Text>
             </TouchableOpacity>
@@ -46,28 +69,3 @@ export default function SegmentedStrip({ pages, activeIndex, onSelect, topInset 
     </View>
   )
 }
-
-const s = StyleSheet.create({
-  container: {
-    width: '100%',
-  },
-  content: {
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    gap: 6,
-    alignItems: 'center',
-  },
-  chip: {
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    borderRadius: Radius.full,
-  },
-  chipTxt: {
-    fontSize: Typography.sm,
-    fontWeight: '500',
-  },
-  chipTxtActive: {
-    color: '#0D2137',
-    fontWeight: '600',
-  },
-})

@@ -10,7 +10,7 @@ import WindCompass from '../../components/WindCompass'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Typography, Spacing, Radius } from '../../constants/theme'
 import { useTheme } from '../../hooks/useTheme'
-import { fetchWeatherAndForecast, weatherEmoji, windDir, getWindColor } from '../../utils/weather'
+import { fetchWeatherAndForecast, fetchPressureTrend, weatherEmoji, windDir, getWindColor } from '../../utils/weather'
 import { useDataLocation } from '../../hooks/useDataLocation'
 import { smoothBezierPath, smoothAreaPath } from '../../utils/chart'
 import LocationChip from '../../components/LocationChip'
@@ -53,6 +53,7 @@ function MiniSparkline({ values, color, h = 22, w = 80 }) {
 // ── Compact wind particle overlay (for radar card) ──────────────────────────
 const PARTICLE_N = 20
 function RadarWindOverlay({ windSpeed, windDeg }) {
+  const { Colors } = useTheme()
   const { width: W } = Dimensions.get('window')
   const H = 200
   const particles = useRef(
@@ -101,7 +102,7 @@ function RadarWindOverlay({ windSpeed, windDeg }) {
         <Animated.View key={i} style={{
           position: 'absolute', left: p.startX, top: p.startY,
           width: p.size, height: p.size, borderRadius: p.size / 2,
-          backgroundColor: '#4A8FA8',
+          backgroundColor: Colors.brackishWater,
           transform: [{ translateX: p.tx }, { translateY: p.ty }],
           opacity: p.opacity,
         }}/>
@@ -144,23 +145,23 @@ function RadarCard({ lat, lng, windData }) {
     mapWrap:    { height: 200 },
     map:        { flex: 1 },
     expandHint: { position: 'absolute', top: 8, right: 8, backgroundColor: 'rgba(13,33,55,0.75)', borderRadius: Radius.sm, paddingHorizontal: 8, paddingVertical: 4 },
-    expandTxt:  { fontSize: Typography.xs, color: '#fff', fontWeight: '500' },
+    expandTxt:  { fontSize: Typography.xs, color: Colors.textOnDark, fontWeight: '500' },
     controls:   { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 12, paddingVertical: 10 },
-    playBtn:    { width: 30, height: 30, borderRadius: 15, backgroundColor: Colors.marshGreen, alignItems: 'center', justifyContent: 'center' },
-    playIcon:   { fontSize: 12, color: '#fff' },
+    playBtn:    { width: 30, height: 30, borderRadius: 15, backgroundColor: Colors.catWeather, alignItems: 'center', justifyContent: 'center' },
+    playIcon:   { fontSize: 12, color: Colors.textOnDark },
     timeline:   { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 2 },
     tick:       { flex: 1, height: 4, borderRadius: 2, backgroundColor: Colors.border },
-    tickActive: { backgroundColor: Colors.marshGreen, height: 7, borderRadius: 3.5 },
+    tickActive: { backgroundColor: Colors.catWeather, height: 7, borderRadius: 3.5 },
     timeLabel:  { fontSize: Typography.xs, color: Colors.textMuted, width: 58, textAlign: 'right' },
     fsContainer:{ flex: 1, backgroundColor: '#000' },
     fsClose:    { position: 'absolute', right: 16, width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(13,33,55,0.85)', alignItems: 'center', justifyContent: 'center', borderWidth: 0.5, borderColor: Colors.border },
-    fsCloseTxt: { fontSize: 14, color: '#fff', fontWeight: '600' },
+    fsCloseTxt: { fontSize: 14, color: Colors.textOnDark, fontWeight: '600' },
     fsBar:      { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: 'rgba(13,33,55,0.92)', borderTopWidth: 0.5, borderTopColor: Colors.border, paddingTop: 4 },
     layerRow:     { flexDirection: 'row', gap: 6, paddingHorizontal: Spacing.lg, paddingBottom: 8 },
     layerPill:    { paddingHorizontal: 14, paddingVertical: 5, borderRadius: Radius.full, borderWidth: 0.5, borderColor: Colors.border, backgroundColor: Colors.inputBg },
-    layerPillOn:  { backgroundColor: `${Colors.marshGreen}33`, borderColor: Colors.marshGreen },
+    layerPillOn:  { backgroundColor: `${Colors.catWeather}33`, borderColor: Colors.catWeather },
     layerPillTxt: { fontSize: Typography.xs, color: Colors.textSecondary, fontWeight: '500' },
-    layerPillTxtOn:{ color: Colors.marshGreen, fontWeight: '700' },
+    layerPillTxtOn:{ color: Colors.catWeather, fontWeight: '700' },
   }), [Colors])
 
   useEffect(() => {
@@ -205,7 +206,7 @@ function RadarCard({ lat, lng, windData }) {
         <View style={rc.header}>
           <Text style={rc.title}>Live Radar</Text>
           {frames.length === 0
-            ? <ActivityIndicator size="small" color={Colors.marshGreen}/>
+            ? <ActivityIndicator size="small" color={Colors.catWeather}/>
             : <Text style={rc.frameTime}>{radarFrameTime(frames[frameIdx].time)}</Text>
           }
         </View>
@@ -282,9 +283,9 @@ function TempChart({ temps }) {
     wrap:      { height: CHART_H, width: CHART_W, position: 'relative', marginBottom: 4, overflow: 'hidden' },
     gridLbl:   { position: 'absolute', left: 0, width: PAD_L - 4, textAlign: 'right', fontSize: 11, fontWeight: 'bold', color: Colors.textMuted },
     nowLine:   { position: 'absolute', top: PAD_T, bottom: PAD_B, width: 1.5, backgroundColor: Colors.doubloonGold },
-    scrubLine: { position: 'absolute', top: PAD_T, bottom: PAD_B, width: 1.5, backgroundColor: Colors.marshGreen, opacity: 0.8 },
-    bubble:    { position: 'absolute', backgroundColor: Colors.marshGreen, borderRadius: Radius.sm, paddingHorizontal: 8, paddingVertical: 5, minWidth: 52, alignItems: 'center' },
-    bubbleVal: { fontSize: 15, fontWeight: '700', color: '#fff' },
+    scrubLine: { position: 'absolute', top: PAD_T, bottom: PAD_B, width: 1.5, backgroundColor: Colors.catWeather, opacity: 0.8 },
+    bubble:    { position: 'absolute', backgroundColor: Colors.catWeather, borderRadius: Radius.sm, paddingHorizontal: 8, paddingVertical: 5, minWidth: 52, alignItems: 'center' },
+    bubbleVal: { fontSize: 15, fontWeight: '700', color: Colors.textOnDark },
     xLbl:      { position: 'absolute', fontSize: 11, fontWeight: 'bold', color: Colors.textSecondary },
   }), [Colors])
 
@@ -308,7 +309,7 @@ function TempChart({ temps }) {
   }
 
   if (!temps || temps.length === 0) return (
-    <View style={[ch.wrap, { alignItems: 'center', justifyContent: 'center' }]}><ActivityIndicator color={Colors.marshGreen}/></View>
+    <View style={[ch.wrap, { alignItems: 'center', justifyContent: 'center' }]}><ActivityIndicator color={Colors.catWeather}/></View>
   )
 
   const minVal = Math.min(...temps), maxVal = Math.max(...temps)
@@ -334,16 +335,16 @@ function TempChart({ temps }) {
       <Svg width={CHART_W} height={CHART_H} style={StyleSheet.absoluteFillObject}>
         <Defs>
           <LinearGradient id="tempGrad" x1="0" y1="0" x2="0" y2="1">
-            <Stop offset="0" stopColor={Colors.marshGreen} stopOpacity="0.4"/>
-            <Stop offset="1" stopColor={Colors.marshGreen} stopOpacity="0.03"/>
+            <Stop offset="0" stopColor={Colors.catWeather} stopOpacity="0.4"/>
+            <Stop offset="1" stopColor={Colors.catWeather} stopOpacity="0.03"/>
           </LinearGradient>
         </Defs>
         {gridVals.map((v, i) => {
           const y = PAD_T + PLOT_H - ((v - minVal) / range) * PLOT_H
-          return <Path key={i} d={`M ${PAD_L},${y.toFixed(1)} L ${CHART_W - PAD_R},${y.toFixed(1)}`} stroke="rgba(46,139,90,0.12)" strokeWidth="0.5"/>
+          return <Path key={i} d={`M ${PAD_L},${y.toFixed(1)} L ${CHART_W - PAD_R},${y.toFixed(1)}`} stroke={`${Colors.catWeather}1F`} strokeWidth="0.5"/>
         })}
         <Path d={smoothAreaPath(pts, CHART_H - PAD_B)} fill="url(#tempGrad)"/>
-        <Path d={smoothBezierPath(pts)} fill="none" stroke={Colors.marshGreen} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+        <Path d={smoothBezierPath(pts)} fill="none" stroke={Colors.catWeather} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
       </Svg>
       {gridVals.map((v, i) => {
         const y = PAD_T + PLOT_H - ((v - minVal) / range) * PLOT_H
@@ -440,13 +441,13 @@ function WeatherDayStrip({ daily, selectedIdx, onSelect }) {
   const wds = useMemo(() => StyleSheet.create({
     scroll:  { backgroundColor: Colors.topbarBg },
     content: { paddingHorizontal: 12, paddingVertical: 10, gap: 6 },
-    pill:    { width: 68, alignItems: 'center', paddingVertical: 8, borderRadius: Radius.md, borderWidth: 0.5, borderColor: 'rgba(255,255,255,0.15)', backgroundColor: 'rgba(255,255,255,0.04)', gap: 2 },
-    pillSel: { backgroundColor: `${Colors.brackishWater}59`, borderColor: Colors.brackishWater },
-    label:   { fontSize: 9, color: 'rgba(255,255,255,0.7)', fontWeight: '600', letterSpacing: 0.3 },
-    num:     { fontSize: Typography.md, fontWeight: '700', color: '#fff' },
+    pill:    { width: 68, alignItems: 'center', paddingVertical: 8, borderRadius: Radius.md, borderWidth: 0.5, borderColor: Colors.border, backgroundColor: Colors.inputBg, gap: 2 },
+    pillSel: { backgroundColor: Colors.borderMid, borderColor: Colors.textPrimary },
+    label:   { fontSize: 9, color: Colors.textSecondary, fontWeight: '600', letterSpacing: 0.3 },
+    num:     { fontSize: Typography.md, fontWeight: '700', color: Colors.textPrimary },
     emoji:   { fontSize: 14 },
-    hi:      { fontSize: 9, color: 'rgba(255,255,255,0.7)', fontWeight: '600' },
-    textSel: { color: '#fff' },
+    hi:      { fontSize: 9, color: Colors.textSecondary, fontWeight: '600' },
+    textSel: { color: Colors.textPrimary },
   }), [Colors])
 
   if (!daily) return null
@@ -476,6 +477,8 @@ export default function WeatherScreen() {
   const insets      = useSafeAreaInsets()
   const { weatherLocation, setWeatherLocation } = useDataLocation()
   const [weather,        setWeather]        = useState(null)
+  const [pressureHpa,    setPressureHpa]    = useState(null)
+  const [pressureDp,     setPressureDp]     = useState(0)
   const [loading,        setLoading]        = useState(true)
   const [refreshing,     setRefreshing]     = useState(false)
   const [showPicker,     setShowPicker]     = useState(false)
@@ -483,8 +486,14 @@ export default function WeatherScreen() {
 
   const loadData = useCallback(async () => {
     try {
-      const data = await fetchWeatherAndForecast(weatherLocation.lat, weatherLocation.lng)
+      const [data, pressure] = await Promise.all([
+        fetchWeatherAndForecast(weatherLocation.lat, weatherLocation.lng),
+        fetchPressureTrend(weatherLocation.lat, weatherLocation.lng),
+      ])
       setWeather(data)
+      const arr = pressure?.hourlyPressure ?? []
+      setPressureHpa(arr.length > 0 ? arr[Math.min(5, arr.length - 1)] : null)
+      setPressureDp(pressure?.dP ?? 0)
     } catch (e) {
       console.log('Weather fetch error:', e)
     } finally {
@@ -507,24 +516,25 @@ export default function WeatherScreen() {
     container: { flex: 1, backgroundColor: Colors.screenBg },
     topbar:        { backgroundColor: Colors.topbarBg, flexDirection: 'row', alignItems: 'center', paddingHorizontal: Spacing.md, paddingBottom: 12, gap: 8 },
     topbarBack:    { padding: 4 },
-    topbarBackTxt: { fontSize: 26, color: '#fff', lineHeight: 30 },
-    topbarTitle:   { flex: 1, fontFamily: 'Georgia', fontSize: Typography.lg, fontWeight: '700', color: '#fff', letterSpacing: 0.5 },
+    topbarBackTxt: { fontSize: 26, color: Colors.textPrimary, lineHeight: 30 },
+    topbarTitle:   { flex: 1, fontFamily: 'Georgia', fontSize: Typography.lg, fontWeight: '700', color: Colors.textPrimary, letterSpacing: 0.5 },
     content: { padding: Spacing.lg, gap: Spacing.md, paddingBottom: 80 },
     loadingBox: { alignItems: 'center', paddingTop: 80, gap: 16 },
     loadingTxt: { fontSize: Typography.base, color: Colors.textMuted },
 
     // Rich hero card
-    heroCard:     { backgroundColor: Colors.deepSea, borderRadius: Radius.lg, padding: Spacing.md },
+    heroCard:     { backgroundColor: Colors.cardBg, borderRadius: Radius.lg, padding: Spacing.md },
     heroTop:      { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 12 },
     heroTempCol:  { flex: 1 },
     heroLabel:    { fontSize: Typography.xs, color: Colors.textSecondary, marginBottom: 2 },
-    heroTemp:     { fontSize: 52, fontWeight: '700', color: Colors.textPrimary, fontFamily: 'Georgia', lineHeight: 56 },
+    heroTemp:     { fontSize: 36, fontWeight: '700', color: Colors.textPrimary, fontFamily: 'Georgia', lineHeight: 40 },
+    heroFeelsLike:{ fontSize: Typography.sm, color: Colors.textSecondary, marginTop: 1 },
     heroCondition:{ fontSize: Typography.sm, color: Colors.textSecondary, marginTop: 2 },
     heroEmoji:    { fontSize: 52, lineHeight: 58 },
     heroStatGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, borderTopWidth: 0.5, borderTopColor: Colors.border, paddingTop: 10 },
-    heroStat:     { backgroundColor: Colors.inputBg, borderRadius: Radius.md, paddingHorizontal: 12, paddingVertical: 8, alignItems: 'center', minWidth: '22%', flex: 1 },
-    heroStatLbl:  { fontSize: 9, color: Colors.textSecondary, letterSpacing: 0.3, marginBottom: 2 },
-    heroStatVal:  { fontSize: Typography.sm, fontWeight: '700', color: Colors.textPrimary },
+    heroStat:     { backgroundColor: Colors.inputBg, borderRadius: Radius.md, paddingHorizontal: 14, paddingVertical: 12, alignItems: 'center', flex: 1 },
+    heroStatLbl:  { fontSize: 10, color: Colors.textSecondary, letterSpacing: 0.3, marginBottom: 3 },
+    heroStatVal:  { fontSize: Typography.base, fontWeight: '700', color: Colors.textPrimary },
     heroSparkRow: { marginTop: 10, borderTopWidth: 0.5, borderTopColor: Colors.border, paddingTop: 10 },
     heroSparkLbl: { fontSize: 9, color: Colors.textSecondary, letterSpacing: 0.3, marginBottom: 6 },
 
@@ -533,17 +543,19 @@ export default function WeatherScreen() {
     cardSub:   { fontSize: Typography.xs, color: Colors.textMuted, marginBottom: 14 },
   }), [Colors])
 
-  const precipPct  = daily?.precipitation_probability_max?.[selIdx]
-  const hiTemp     = daily?.temperature_2m_max?.[selIdx]
-  const loTemp     = daily?.temperature_2m_min?.[selIdx]
-  const maxWind    = daily?.windspeed_10m_max?.[selIdx]
-  const windDirDom = daily?.winddirection_10m_dominant?.[selIdx]
+  const precipPct    = daily?.precipitation_probability_max?.[selIdx]
+  const hiTemp       = daily?.temperature_2m_max?.[selIdx]
+  const loTemp       = daily?.temperature_2m_min?.[selIdx]
+  const maxWind      = daily?.windspeed_10m_max?.[selIdx]
+  const windDirDom   = daily?.winddirection_10m_dominant?.[selIdx]
+  const pressureInHg = pressureHpa != null ? (pressureHpa * 0.02953).toFixed(2) : null
+  const pressureTrend = pressureDp > 1 ? ' ↑' : pressureDp < -1 ? ' ↓' : ''
 
   return (
     <View style={s.container}>
       <View style={[s.topbar, { paddingTop: 10 }]}>
         <Text style={s.topbarTitle}>Weather</Text>
-        <LocationChip label={weatherLocation.name} onPress={() => setShowPicker(true)} color="#fff" boneColor={Colors.topbarBg}/>
+        <LocationChip label={weatherLocation.name} onPress={() => setShowPicker(true)} color={Colors.textPrimary} boneColor={Colors.topbarBg}/>
       </View>
 
       {!loading && <WeatherDayStrip daily={daily} selectedIdx={selIdx} onSelect={setSelectedDayIdx}/>}
@@ -552,7 +564,7 @@ export default function WeatherScreen() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.marshGreen}/>}>
         {loading ? (
           <View style={s.loadingBox}>
-            <ActivityIndicator size="large" color={Colors.marshGreen}/>
+            <ActivityIndicator size="large" color={Colors.catWeather}/>
             <Text style={s.loadingTxt}>Fetching weather…</Text>
           </View>
         ) : (
@@ -566,9 +578,21 @@ export default function WeatherScreen() {
                       ? new Date(daily.time[selIdx] + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })
                       : ''}
                   </Text>
-                  <Text style={s.heroTemp}>
-                    {isToday && cur ? `${Math.round(cur.temperature_2m)}°` : hiTemp != null ? `${Math.round(hiTemp)}°` : '—'}
-                  </Text>
+                  {isToday && cur ? (
+                    <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 6 }}>
+                      <View>
+                        <Text style={s.heroTemp}>{Math.round(cur.temperature_2m)}°</Text>
+                        <Text style={s.heroFeelsLike}>Current</Text>
+                      </View>
+                      <Text style={[s.heroTemp, { marginBottom: 18 }]}>/</Text>
+                      <View>
+                        <Text style={s.heroTemp}>{cur.apparent_temperature != null ? Math.round(cur.apparent_temperature) : '—'}°</Text>
+                        <Text style={s.heroFeelsLike}>Feels like</Text>
+                      </View>
+                    </View>
+                  ) : (
+                    <Text style={s.heroTemp}>{hiTemp != null ? `${Math.round(hiTemp)}°` : '—'}</Text>
+                  )}
                   <Text style={s.heroCondition} numberOfLines={1}>{weatherLocation.name}</Text>
                 </View>
                 <Text style={s.heroEmoji}>{daily ? weatherEmoji(daily.weathercode[selIdx]) : '🌤️'}</Text>
@@ -595,10 +619,10 @@ export default function WeatherScreen() {
                     </Text>
                   </View>
                 )}
-                {isToday && cur && (
+                {isToday && pressureInHg != null && (
                   <View style={s.heroStat}>
-                    <Text style={s.heroStatLbl}>FEELS LIKE</Text>
-                    <Text style={s.heroStatVal}>{Math.round(cur.temperature_2m)}°F</Text>
+                    <Text style={s.heroStatLbl}>BARO</Text>
+                    <Text style={s.heroStatVal}>{pressureInHg} {pressureTrend}</Text>
                   </View>
                 )}
               </View>

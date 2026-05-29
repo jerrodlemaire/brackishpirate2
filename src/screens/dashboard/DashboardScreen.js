@@ -10,7 +10,7 @@ import { useTheme } from '../../hooks/useTheme'
 import { getSolunarForDate, buildCompositeCurve, peakWeightedAverage, scoreColor } from '../../utils/solunar'
 import ActivityGauge from '../../components/ActivityGauge'
 import { fetchTideHourly } from '../../utils/tides'
-import { fetchWeatherAndForecast, fetchMarineData, fetchWaterTemp, windDir, getWindColor } from '../../utils/weather'
+import { fetchWeatherAndForecast, fetchMarineData, fetchWaterTemp, fetchPressureTrend, windDir, getWindColor } from '../../utils/weather'
 import JollyRoger from '../../components/JollyRoger'
 import WindCompass from '../../components/WindCompass'
 import HomePortPicker from '../../components/HomePortPicker'
@@ -51,27 +51,36 @@ export default function DashboardScreen({ pagerRef }) {
   const [showPicker,   setShowPicker]   = useState(false)
   const [refreshing,   setRefreshing]   = useState(false)
 
-  const [weather,    setWeather]    = useState(null)
-  const [marine,     setMarine]     = useState(null)
-  const [waterTemp,  setWaterTemp]  = useState(null)
-  const [hourlyTide, setHourlyTide] = useState([])
+  const [weather,      setWeather]      = useState(null)
+  const [marine,       setMarine]       = useState(null)
+  const [waterTemp,    setWaterTemp]    = useState(null)
+  const [hourlyTide,   setHourlyTide]   = useState([])
+  const [dP,           setDP]           = useState(0)
+  const [pressureHpa,  setPressureHpa]  = useState(null)
+  const [pressureSpark,setPressureSpark]= useState([])
 
-  const sol         = getSolunarForDate(new Date(), homePort.lat, homePort.lng)
-  const curve       = useMemo(() => buildCompositeCurve(sol, hourlyTide, 0), [sol, hourlyTide])
-  const fishScore   = useMemo(() => peakWeightedAverage(curve), [curve])
+  const today     = useMemo(() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d }, [])
+  const sol       = useMemo(() => getSolunarForDate(today, homePort.lat, homePort.lng), [today, homePort.lat, homePort.lng])
+  const curve     = useMemo(() => buildCompositeCurve(sol, hourlyTide, dP), [sol, hourlyTide, dP])
+  const fishScore = useMemo(() => peakWeightedAverage(curve), [curve])
 
   const loadData = useCallback(async () => {
     try {
-      const [w, m, wt, tide] = await Promise.all([
+      const [w, m, wt, tide, pressure] = await Promise.all([
         fetchWeatherAndForecast(homePort.lat, homePort.lng),
         fetchMarineData(buoy.lat ?? 29.212, buoy.lng ?? -88.208),
         fetchWaterTemp(),
         fetchTideHourly(new Date(), activeStation.id),
+        fetchPressureTrend(homePort.lat, homePort.lng),
       ])
       setWeather(w)
       setMarine(m)
       setWaterTemp(wt)
       setHourlyTide(tide)
+      setDP(pressure?.dP ?? 0)
+      const rawArr = pressure?.hourlyPressure ?? []
+      setPressureHpa(rawArr.length > 0 ? rawArr[Math.min(5, rawArr.length - 1)] : null)
+      setPressureSpark(rawArr)
     } catch (e) {
       console.log('Dashboard load error:', e)
     } finally {
@@ -100,6 +109,10 @@ export default function DashboardScreen({ pagerRef }) {
   const todayHigh  = weather?.daily?.temperature_2m_max?.[0]
   const todayLow   = weather?.daily?.temperature_2m_min?.[0]
 
+  const pressureInHg     = pressureHpa != null ? (pressureHpa * 0.02953).toFixed(2) : null
+  const pressureTrend    = dP > 1 ? 'Rising ↑' : dP < -1 ? 'Falling ↓' : 'Steady →'
+  const pressureTrendClr = dP > 1 ? Colors.trendUp : dP < -1 ? Colors.trendDown : Colors.textSecondary
+
   const tideSpark  = hourlyTide.length > 0 ? hourlyTide.slice(0, 24).map(p => parseFloat(p.v)) : null
   const waveSpark  = marine?.hourlyWaves?.filter(v => v != null).length > 0 ? marine.hourlyWaves : null
   const windSpark  = weather?.hourlyWindSpeeds?.length > 0 ? weather.hourlyWindSpeeds : null
@@ -117,14 +130,14 @@ export default function DashboardScreen({ pagerRef }) {
     container: { flex: 1, backgroundColor: Colors.screenBg },
     content:   { paddingBottom: 32 },
 
-    heroCard:       { backgroundColor: Colors.deepSea, margin: 12, borderRadius: Radius.lg, padding: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.25, shadowRadius: 10, elevation: 6 },
+    heroCard:       { backgroundColor: Colors.cardBg, margin: 12, borderRadius: Radius.lg, padding: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.25, shadowRadius: 10, elevation: 6 },
     heroRow1:       { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 },
     heroLeft:       { flex: 1 },
     homePortRow:    { flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 3 },
-    homePortLabel:  { fontSize: 9, color: Colors.doubloonGold, fontWeight: '700', letterSpacing: 1.4 },
-    homePortName:   { fontSize: Typography.base, fontFamily: 'Georgia', fontWeight: '700', color: Colors.saltWhite },
-    changeBtn:      { backgroundColor: 'rgba(196,154,42,0.15)', borderRadius: Radius.md, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 0.5, borderColor: 'rgba(196,154,42,0.4)' },
-    changeBtnTxt:   { fontSize: Typography.xs, color: Colors.doubloonGold, fontWeight: '600' },
+    homePortLabel:  { fontSize: 9, color: Colors.catFish, fontWeight: '700', letterSpacing: 1.4 },
+    homePortName:   { fontSize: Typography.base, fontFamily: 'Georgia', fontWeight: '700', color: Colors.textPrimary },
+    changeBtn:      { backgroundColor: `${Colors.catFish}26`, borderRadius: Radius.md, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 0.5, borderColor: `${Colors.catFish}66` },
+    changeBtnTxt:   { fontSize: Typography.xs, color: Colors.catFish, fontWeight: '600' },
     heroRow2:       { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 4 },
     homePortCoords: { fontSize: Typography.xs, color: Colors.textSecondary, letterSpacing: 0.4 },
     heroStatInline: { flexDirection: 'row', alignItems: 'center', gap: 6 },
@@ -133,16 +146,17 @@ export default function DashboardScreen({ pagerRef }) {
 
     themeRow:   { flexDirection: 'row', marginHorizontal: 12, marginBottom: Spacing.sm, gap: 8 },
     themeBtn:   { flex: 1, paddingVertical: 8, borderRadius: Radius.md, borderWidth: 0.5, borderColor: Colors.border, alignItems: 'center', backgroundColor: Colors.cardBg },
-    themeBtnOn: { backgroundColor: `${Colors.doubloonGold}22`, borderColor: Colors.doubloonGold },
+    themeBtnOn: { backgroundColor: `${Colors.catFish}22`, borderColor: Colors.catFish },
     themeTxt:   { fontSize: Typography.sm, color: Colors.textSecondary, fontWeight: '500' },
-    themeTxtOn: { color: Colors.doubloonGold, fontWeight: '700' },
+    themeTxtOn: { color: Colors.catFish, fontWeight: '700' },
 
     cardGrid:      { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 12, gap: Spacing.sm, marginBottom: Spacing.md },
     dataCard:      { width: '47.5%', backgroundColor: Colors.cardBg, borderRadius: Radius.lg, borderTopWidth: 3, borderTopColor: Colors.border, borderBottomWidth: 0.5, borderLeftWidth: 0.5, borderRightWidth: 0.5, borderBottomColor: Colors.border, borderLeftColor: Colors.border, borderRightColor: Colors.border, padding: Spacing.md, gap: 1 },
-    dataCardTeal:  { borderTopColor: '#4A8FA8' },
-    dataCardGold:  { borderTopColor: Colors.doubloonGold },
-    dataCardGreen: { borderTopColor: Colors.marshGreen },
-    dataCardNavy:  { borderTopColor: '#0D2137' },
+    dataCardFull:  { width: '100%' },
+    dataCardTeal:  { borderTopColor: Colors.catTides },
+    dataCardGold:  { borderTopColor: Colors.catFish },
+    dataCardGreen: { borderTopColor: Colors.catWeather },
+    dataCardNavy:  { borderTopColor: Colors.deepSea },
     dataCardLabel: { fontSize: 9, fontWeight: '700', color: Colors.textSecondary, letterSpacing: 1.2, marginBottom: 2 },
     dataCardVal:   { fontSize: Typography.lg, fontWeight: '700', fontFamily: 'Georgia' },
     dataCardSub:   { fontSize: Typography.xs, color: Colors.textSecondary, marginBottom: 6 },
@@ -157,7 +171,7 @@ export default function DashboardScreen({ pagerRef }) {
     <ScrollView
       style={s.container}
       contentContainerStyle={s.content}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.doubloonGold}/>}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.catFish}/>}
     >
 
       {/* HOME PORT */}
@@ -165,7 +179,7 @@ export default function DashboardScreen({ pagerRef }) {
         <View style={s.heroRow1}>
           <View style={s.heroLeft}>
             <View style={s.homePortRow}>
-              <JollyRoger size={13} flagColor={Colors.doubloonGold} boneColor={Colors.deepSea}/>
+              <JollyRoger size={13} flagColor={Colors.catFish} boneColor={Colors.deepSea}/>
               <Text style={s.homePortLabel}>HOME PORT</Text>
             </View>
             <Text style={s.homePortName} numberOfLines={1}>{displayName}</Text>
@@ -206,11 +220,11 @@ export default function DashboardScreen({ pagerRef }) {
         <TouchableOpacity style={[s.dataCard, s.dataCardGold]} onPress={() => pagerRef?.current?.setPage(1)} activeOpacity={0.8}>
           <Text style={s.dataCardLabel}>FISH ACTIVITY</Text>
           <ActivityGauge score={fishScore} Colors={Colors} size={96}/>
-          <Text style={{ fontSize: 9, color: Colors.doubloonGold, fontWeight: '700', marginTop: 4 }}>
-            MAJ {shortTime(sol.major1.start)} · {shortTime(sol.major2.start)}
+          <Text style={{ fontSize: 9, color: Colors.catFish, fontWeight: '700', marginTop: 4 }}>
+            MAJOR {shortTime(sol.major1.start)} · {shortTime(sol.major2.start)}
           </Text>
-          <Text style={{ fontSize: 9, color: Colors.brackishWater, fontWeight: '700' }}>
-            MIN {shortTime(sol.minor1.start)} · {shortTime(sol.minor2.start)}
+          <Text style={{ fontSize: 9, color: Colors.catTides, fontWeight: '700' }}>
+            MINOR {shortTime(sol.minor1.start)} · {shortTime(sol.minor2.start)}
           </Text>
         </TouchableOpacity>
 
@@ -244,15 +258,27 @@ export default function DashboardScreen({ pagerRef }) {
         {/* Row 3 */}
         <TouchableOpacity style={[s.dataCard, s.dataCardGreen]} onPress={() => pagerRef?.current?.setPage(6)} activeOpacity={0.8}>
           <Text style={s.dataCardLabel}>AIR TEMP</Text>
-          <Text style={[s.dataCardVal, { color: Colors.marshGreen }]}>{airTemp !== null ? `${airTemp}°F` : '—'}</Text>
+          <Text style={[s.dataCardVal, { color: Colors.textPrimary }]}>{airTemp !== null ? `${airTemp}°F` : '—'}</Text>
           <Text style={s.dataCardSub}>{todayHigh != null && todayLow != null ? `H ${Math.round(todayHigh)}° · L ${Math.round(todayLow)}°` : 'Loading…'}</Text>
-          <MiniSparkline values={tempSpark} color={Colors.marshGreen}/>
+          <MiniSparkline values={tempSpark} color={Colors.catWeather}/>
         </TouchableOpacity>
 
         <TouchableOpacity style={[s.dataCard, s.dataCardTeal]} onPress={() => pagerRef?.current?.setPage(6)} activeOpacity={0.8}>
           <Text style={s.dataCardLabel}>WATER TEMP</Text>
           <Text style={[s.dataCardVal, { color: Colors.brackishWater }]}>{waterTemp !== null ? `${Math.round(waterTemp)}°F` : '—'}</Text>
           <Text style={s.dataCardSub}>Surface · NOAA</Text>
+        </TouchableOpacity>
+
+        {/* Barometric Pressure — full width */}
+        <TouchableOpacity style={[s.dataCard, s.dataCardFull, s.dataCardGold]} onPress={() => pagerRef?.current?.setPage(6)} activeOpacity={0.8}>
+          <Text style={s.dataCardLabel}>BAROMETRIC PRESSURE</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between' }}>
+            <View>
+              <Text style={[s.dataCardVal, { color: Colors.catFish }]}>{pressureInHg !== null ? `${pressureInHg} inHg` : '—'}</Text>
+              <Text style={[s.dataCardSub, { color: pressureTrendClr }]}>{pressureInHg !== null ? pressureTrend : 'Loading…'}</Text>
+            </View>
+            <MiniSparkline values={pressureSpark} color={Colors.catFish} w={120}/>
+          </View>
         </TouchableOpacity>
       </View>
 

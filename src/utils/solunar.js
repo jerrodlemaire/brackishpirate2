@@ -1,3 +1,4 @@
+import SunCalc from 'suncalc'
 import { Colors as DefaultColors } from '../constants/theme'
 
 // ── Tunables ───────────────────────────────────────────────────────────────────
@@ -12,6 +13,10 @@ export const PRESSURE_MULTIPLIERS = [
 export const PEAK_WEIGHT_EXPONENT = 2
 export const WINDOW               = { START: 4, END: 22 }
 export const DEFAULT_ALERTS       = { major: true, minor: false, leadMinutes: 15 }
+
+// Lunar / solar constants
+const KM_PER_NM      = 1.852
+const SYNODIC_MONTH  = 29.530588
 
 export function getSolunarForDate(date = new Date(), lat = 30.1766, lng = -90.1146) {
   const JD          = date / 86400000 + 2440587.5
@@ -137,8 +142,8 @@ export function peakWeightedAverage(curve, exp = PEAK_WEIGHT_EXPONENT) {
 }
 
 export function scoreColor(score, Colors = DefaultColors) {
-  if (score >= 80) return Colors.marshGreen
-  if (score >= 65) return Colors.doubloonGold
+  if (score >= 80) return Colors.trendUp
+  if (score >= 65) return Colors.catFish
   if (score >= 50) return Colors.brackishWater
   return Colors.textSecondary
 }
@@ -189,4 +194,133 @@ export function getSunTimes(lat = 30.18, lngDeg = 90.11) {
     return `${hh % 12 === 0 ? 12 : hh % 12}:${mm.toString().padStart(2, '0')} ${ap}`
   }
   return { sunrise: fmt(sr), sunset: fmt(ss) }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// NEW HELPERS for the Solunar screen redesign (moon/sun data only).
+// Additive — existing exports above are untouched.
+// ─────────────────────────────────────────────────────────────────────────────
+
+function formatTime(date) {
+  if (!date || isNaN(date.getTime())) return '—'
+  let h = date.getHours()
+  const m = date.getMinutes()
+  const ap = h >= 12 ? 'pm' : 'am'
+  h = h % 12 === 0 ? 12 : h % 12
+  return `${h}:${m.toString().padStart(2, '0')} ${ap}`
+}
+
+function formatDuration(ms) {
+  if (!isFinite(ms) || ms <= 0) return '—'
+  const totalMin = Math.round(ms / 60000)
+  const h = Math.floor(totalMin / 60)
+  const m = totalMin % 60
+  return `${h}h ${m.toString().padStart(2, '0')}m`
+}
+
+/**
+ * Builds a 25-hour lunar altitude curve for the given date and location.
+ * Returns an array of { hour: 0–24, altitude: degrees } samples.
+ */
+export function buildMoonAltitudeCurve(date = new Date(), lat = 30.1766, lng = -90.1146) {
+  const dayStart = new Date(date)
+  dayStart.setHours(0, 0, 0, 0)
+  const samples = []
+  for (let h = 0; h <= 24; h++) {
+    const t = new Date(dayStart.getTime() + h * 3600 * 1000)
+    const pos = SunCalc.getMoonPosition(t, lat, lng)
+    samples.push({ hour: h, altitude: pos.altitude * 180 / Math.PI })
+  }
+  return samples
+}
+
+/**
+ * Returns moon data for the given date and location.
+ */
+export function getMoonData(date = new Date(), lat = 30.1766, lng = -90.1146) {
+  const noon = new Date(date)
+  noon.setHours(12, 0, 0, 0)
+
+  const pos = SunCalc.getMoonPosition(noon, lat, lng)
+  const ill = SunCalc.getMoonIllumination(noon)
+  const times = SunCalc.getMoonTimes(date, lat, lng, false)
+
+  const distanceNM = Math.round(pos.distance / KM_PER_NM)
+  const age = Math.round(ill.phase * SYNODIC_MONTH * 10) / 10
+
+  let upDurationMs = 0
+  const dayStart = new Date(date); dayStart.setHours(0, 0, 0, 0)
+  const dayEnd   = new Date(dayStart.getTime() + 24 * 3600 * 1000)
+
+  if (times.alwaysUp) {
+    upDurationMs = 24 * 3600 * 1000
+  } else if (times.alwaysDown) {
+    upDurationMs = 0
+  } else {
+    const rise = times.rise ? new Date(times.rise) : null
+    const set  = times.set  ? new Date(times.set)  : null
+    const startAlt = SunCalc.getMoonPosition(dayStart, lat, lng).altitude
+    const startsUp = startAlt > 0
+    if (rise && set) {
+      if (rise < set) {
+        upDurationMs = set - rise
+        if (startsUp) upDurationMs += (rise - dayStart)
+      } else {
+        upDurationMs = (set - dayStart) + (dayEnd - rise)
+      }
+    } else if (rise && !set) {
+      upDurationMs = dayEnd - rise
+    } else if (!rise && set) {
+      upDurationMs = set - dayStart
+    }
+  }
+
+  return {
+    distanceNM,
+    age,
+    moonrise:    times.rise ? formatTime(new Date(times.rise)) : (times.alwaysUp ? 'Up all day' : '—'),
+    moonset:     times.set  ? formatTime(new Date(times.set))  : (times.alwaysDown ? 'Down all day' : '—'),
+    alwaysUp:    !!times.alwaysUp,
+    alwaysDown:  !!times.alwaysDown,
+    upDuration:  formatDuration(upDurationMs),
+    upDurationMs,
+  }
+}
+
+/**
+ * Returns sun data for the given date and location.
+ */
+export function getSunData(date = new Date(), lat = 30.1766, lng = -90.1146) {
+  const times = SunCalc.getTimes(date, lat, lng)
+
+  const sunriseDate     = times.sunrise
+  const sunsetDate      = times.sunset
+  const dawnDate        = times.dawn
+  const duskDate        = times.dusk
+  const nauticalDawnDt  = times.nauticalDawn
+  const nauticalDuskDt  = times.nauticalDusk
+
+  const dayMs = (sunsetDate && sunriseDate && !isNaN(sunsetDate) && !isNaN(sunriseDate))
+    ? (sunsetDate - sunriseDate)
+    : NaN
+  const nightMs = isFinite(dayMs) ? (24 * 3600 * 1000 - dayMs) : NaN
+
+  return {
+    sunrise:       formatTime(sunriseDate),
+    sunset:        formatTime(sunsetDate),
+    dawn:          formatTime(dawnDate),
+    dusk:          formatTime(duskDate),
+    nauticalDawn:  formatTime(nauticalDawnDt),
+    nauticalDusk:  formatTime(nauticalDuskDt),
+    sunriseDate,
+    sunsetDate,
+    dawnDate,
+    duskDate,
+    nauticalDawnDate: nauticalDawnDt,
+    nauticalDuskDate: nauticalDuskDt,
+    dayDuration:   formatDuration(dayMs),
+    nightDuration: formatDuration(nightMs),
+    dayMs,
+    nightMs,
+  }
 }

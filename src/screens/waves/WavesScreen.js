@@ -48,7 +48,7 @@ function WaveChart({ waves }) {
     nowLine:   { position: 'absolute', top: PAD_T, bottom: PAD_B, width: 1.5, backgroundColor: Colors.doubloonGold },
     scrubLine: { position: 'absolute', top: PAD_T, bottom: PAD_B, width: 1.5, backgroundColor: Colors.brackishWater, opacity: 0.8 },
     bubble:    { position: 'absolute', backgroundColor: Colors.brackishWater, borderRadius: Radius.sm, paddingHorizontal: 8, paddingVertical: 5, minWidth: 56, alignItems: 'center' },
-    bubbleVal: { fontSize: 15, fontWeight: '700', color: '#fff' },
+    bubbleVal: { fontSize: 15, fontWeight: '700', color: Colors.textOnDark },
     xLbl:      { position: 'absolute', fontSize: 11, fontWeight: 'bold', color: Colors.textSecondary },
   }), [Colors])
 
@@ -126,7 +126,7 @@ function WaveChart({ waves }) {
         </Defs>
         {gridVals.map((v, i) => {
           const y = PAD_T + PLOT_H - ((v - minVal) / range) * PLOT_H
-          return <Path key={i} d={`M ${PAD_L},${y.toFixed(1)} L ${CHART_W - PAD_R},${y.toFixed(1)}`} stroke="rgba(74,143,168,0.12)" strokeWidth="0.5"/>
+          return <Path key={i} d={`M ${PAD_L},${y.toFixed(1)} L ${CHART_W - PAD_R},${y.toFixed(1)}`} stroke={`${Colors.catTides}1F`} strokeWidth="0.5"/>
         })}
         <Path d={areaPath} fill="url(#waveGrad)"/>
         <Path d={linePath} fill="none" stroke={Colors.brackishWater} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
@@ -168,14 +168,14 @@ function WavesDayStrip({ dailyMax, selectedIdx, onSelect }) {
   const dws = useMemo(() => StyleSheet.create({
     scroll:  { backgroundColor: Colors.topbarBg },
     content: { paddingHorizontal: 12, paddingVertical: 10, gap: 6, alignItems: 'center' },
-    pill:    { width: 62, alignItems: 'center', paddingTop: 8, paddingBottom: 14, borderRadius: Radius.md, borderWidth: 0.5, borderColor: 'rgba(255,255,255,0.15)', backgroundColor: 'rgba(255,255,255,0.04)', gap: 4 },
-    pillSel: { backgroundColor: `${Colors.brackishWater}59`, borderColor: Colors.brackishWater },
-    label:   { fontSize: 9, color: 'rgba(255,255,255,0.7)', fontWeight: '600', letterSpacing: 0.3 },
-    num:     { fontSize: Typography.md, fontWeight: '700', color: '#fff' },
+    pill:    { width: 62, alignItems: 'center', paddingTop: 8, paddingBottom: 14, borderRadius: Radius.md, borderWidth: 0.5, borderColor: Colors.border, backgroundColor: Colors.inputBg, gap: 4 },
+    pillSel: { backgroundColor: Colors.borderMid, borderColor: Colors.textPrimary },
+    label:   { fontSize: 9, color: Colors.textSecondary, fontWeight: '600', letterSpacing: 0.3 },
+    num:     { fontSize: Typography.md, fontWeight: '700', color: Colors.textPrimary },
     wave:    { fontSize: 12 },
     ht:      { fontSize: Typography.sm, fontWeight: '700', color: Colors.brackishWater },
-    unit:    { fontSize: 10, color: 'rgba(255,255,255,0.5)' },
-    textSel: { color: '#fff' },
+    unit:    { fontSize: 10, color: Colors.textMuted },
+    textSel: { color: Colors.textPrimary },
   }), [Colors])
 
   if (!dailyMax || !dailyMax.length) return null
@@ -251,15 +251,15 @@ export default function WavesScreen() {
 
     topbar:        { backgroundColor: Colors.topbarBg, flexDirection: 'row', alignItems: 'center', paddingHorizontal: Spacing.md, paddingBottom: 12, gap: 8 },
     topbarBack:    { padding: 4 },
-    topbarBackTxt: { fontSize: 26, color: '#fff', lineHeight: 30 },
-    topbarTitle:   { flex: 1, fontFamily: 'Georgia', fontSize: Typography.lg, fontWeight: '700', color: '#fff', letterSpacing: 0.5 },
+    topbarBackTxt: { fontSize: 26, color: Colors.textPrimary, lineHeight: 30 },
+    topbarTitle:   { flex: 1, fontFamily: 'Georgia', fontSize: Typography.lg, fontWeight: '700', color: Colors.textPrimary, letterSpacing: 0.5 },
 
     content: { padding: Spacing.lg, gap: Spacing.md, paddingBottom: 80 },
 
     loadingBox: { alignItems: 'center', paddingTop: 80, gap: 16 },
     loadingTxt: { fontSize: Typography.base, color: Colors.textMuted },
 
-    heroCard:     { backgroundColor: Colors.deepSea, borderRadius: Radius.lg, padding: 12, flexDirection: 'row', alignItems: 'center' },
+    heroCard:     { backgroundColor: Colors.cardBg, borderRadius: Radius.lg, padding: 12, flexDirection: 'row', alignItems: 'center' },
     heroLeft:     { flex: 1 },
     heroLabel:    { fontSize: Typography.xs, color: Colors.textSecondary, marginBottom: 4 },
     heroWave:     { fontSize: 38, fontWeight: '700', color: Colors.brackishWater, fontFamily: 'Georgia', lineHeight: 42 },
@@ -298,7 +298,7 @@ export default function WavesScreen() {
         <LocationChip
           label={buoy.name}
           onPress={() => setShowPicker(true)}
-          color={Colors.doubloonGold}
+          color={Colors.catFish}
           boneColor={Colors.topbarBg}
         />
       </View>

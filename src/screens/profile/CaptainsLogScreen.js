@@ -91,9 +91,9 @@ function MyCatches({ user }) {
     strip2:      { maxHeight: 38 },
     stripContent:{ paddingHorizontal: 12, paddingVertical: 6, gap: 6, flexDirection: 'row' },
     chip:        { paddingHorizontal: 12, paddingVertical: 5, borderRadius: Radius.full, borderWidth: 0.5, borderColor: Colors.border, backgroundColor: Colors.inputBg },
-    chipOn:      { backgroundColor: Colors.brackishWater, borderColor: Colors.brackishWater },
+    chipOn:      { backgroundColor: Colors.buttonBg, borderColor: Colors.buttonBg },
     chipTxt:     { fontSize: Typography.sm, color: Colors.textSecondary, fontWeight: '500' },
-    chipTxtOn:   { color: '#fff' },
+    chipTxtOn:   { color: Colors.buttonText },
     timeChip:    { paddingHorizontal: 10, paddingVertical: 4, borderRadius: Radius.full, borderWidth: 0.5, borderColor: 'transparent' },
     timeChipOn:  { backgroundColor: `${Colors.doubloonGold}1F`, borderColor: Colors.doubloonGold },
     timeTxt:     { fontSize: Typography.xs, color: Colors.textSecondary },
@@ -103,8 +103,8 @@ function MyCatches({ user }) {
     empty:       { alignItems: 'center', paddingTop: 60, gap: 8 },
     emptyTitle:  { fontSize: Typography.lg, fontWeight: '500', color: Colors.textPrimary },
     emptySub:    { fontSize: Typography.base, color: Colors.textSecondary, textAlign: 'center', paddingHorizontal: 32 },
-    fab:         { position: 'absolute', bottom: 16, left: 16, right: 16, backgroundColor: Colors.brackishWater, borderRadius: Radius.lg, paddingVertical: 14, alignItems: 'center' },
-    fabTxt:      { fontFamily: 'Georgia', fontSize: Typography.base, fontWeight: '700', color: '#fff', letterSpacing: 0.5 },
+    fab:         { position: 'absolute', bottom: 16, left: 16, right: 16, backgroundColor: Colors.buttonBg, borderRadius: Radius.lg, paddingVertical: 14, alignItems: 'center' },
+    fabTxt:      { fontFamily: 'Georgia', fontSize: Typography.base, fontWeight: '700', color: Colors.buttonText, letterSpacing: 0.5 },
   }), [Colors])
 
   const [reports,       setReports]       = useState([])
@@ -251,7 +251,7 @@ function ProfileSection({ user }) {
     userEmail:     { fontSize: Typography.sm, color: Colors.textSecondary },
     statsRow:      { flexDirection: 'row', gap: 8 },
     statBox:       { flex: 1, backgroundColor: Colors.cardBg, borderRadius: Radius.md, borderWidth: 0.5, borderColor: Colors.border, padding: 12, alignItems: 'center', gap: 3 },
-    statVal:       { fontSize: Typography.xl, fontWeight: '700', color: Colors.doubloonGold, fontFamily: 'Georgia' },
+    statVal:       { fontSize: Typography.xl, fontWeight: '700', color: Colors.catFish, fontFamily: 'Georgia' },
     statLabel:     { fontSize: Typography.xs, color: Colors.textSecondary },
     card:          { backgroundColor: Colors.cardBg, borderRadius: Radius.lg, borderWidth: 0.5, borderColor: Colors.border, padding: Spacing.lg, gap: Spacing.md },
     cardTitle:     { fontSize: Typography.base, fontWeight: '600', color: Colors.textPrimary },
@@ -266,7 +266,7 @@ function ProfileSection({ user }) {
     stationVal:    { fontSize: Typography.sm, fontWeight: '500', color: Colors.textPrimary },
     notifRow:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 10 },
     notifLabel:    { fontSize: Typography.base, color: Colors.textPrimary },
-    signOutBtn:    { backgroundColor: 'rgba(226,75,74,0.12)', borderRadius: Radius.md, borderWidth: 0.5, borderColor: 'rgba(226,75,74,0.35)', paddingVertical: 13, alignItems: 'center' },
+    signOutBtn:    { backgroundColor: Colors.dangerBg, borderRadius: Radius.md, borderWidth: 0.5, borderColor: `${Colors.danger}59`, paddingVertical: 13, alignItems: 'center' },
     signOutTxt:    { fontSize: Typography.base, color: Colors.danger, fontWeight: '600' },
     feedbackRow:   { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: Colors.cardBg, borderRadius: Radius.lg, borderWidth: 0.5, borderColor: Colors.border, paddingVertical: 14, paddingHorizontal: Spacing.lg },
     feedbackIcon:  { fontSize: 20 },
@@ -278,11 +278,11 @@ function ProfileSection({ user }) {
     fbInput:       { backgroundColor: Colors.inputBg, borderRadius: Radius.md, borderWidth: 0.5, borderColor: Colors.border, padding: 12, fontSize: Typography.base, color: Colors.textPrimary, minHeight: 100, textAlignVertical: 'top' },
     fbCatRow:      { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
     fbCat:         { paddingHorizontal: 12, paddingVertical: 6, borderRadius: Radius.full, borderWidth: 0.5, borderColor: Colors.border, backgroundColor: Colors.inputBg },
-    fbCatOn:       { backgroundColor: Colors.brackishWater, borderColor: Colors.brackishWater },
+    fbCatOn:       { backgroundColor: Colors.buttonBg, borderColor: Colors.buttonBg },
     fbCatTxt:      { fontSize: Typography.sm, color: Colors.textSecondary, fontWeight: '500' },
-    fbCatTxtOn:    { color: '#fff' },
-    fbSubmit:      { backgroundColor: Colors.brackishWater, borderRadius: Radius.md, paddingVertical: 13, alignItems: 'center' },
-    fbSubmitTxt:   { fontSize: Typography.base, fontWeight: '700', color: '#fff', letterSpacing: 0.3 },
+    fbCatTxtOn:    { color: Colors.buttonText },
+    fbSubmit:      { backgroundColor: Colors.buttonBg, borderRadius: Radius.md, paddingVertical: 13, alignItems: 'center' },
+    fbSubmitTxt:   { fontSize: Typography.base, fontWeight: '700', color: Colors.buttonText, letterSpacing: 0.3 },
     fbSuccess:     { alignItems: 'center', paddingVertical: Spacing.xl, gap: 12 },
     fbSuccessEmoji:{ fontSize: 44 },
     fbSuccessTxt:  { fontSize: Typography.lg, fontWeight: '600', color: Colors.textPrimary, textAlign: 'center' },
@@ -345,8 +345,8 @@ function ProfileSection({ user }) {
         <View style={s.notifRow}>
           <Text style={s.notifLabel}>Bite alerts</Text>
           <Switch value={notifBite} onValueChange={setNotifBite}
-            trackColor={{ false: Colors.border, true: Colors.brackishWater }}
-            thumbColor={notifBite ? '#fff' : 'rgba(255,255,255,0.4)'}/>
+            trackColor={{ false: Colors.border, true: Colors.buttonBg }}
+            thumbColor={notifBite ? Colors.textOnDark : Colors.textMuted}/>
         </View>
         <View style={[s.notifRow, { borderTopWidth: 0.5, borderTopColor: Colors.border }]}>
           <Text style={s.notifLabel}>Tide change alerts</Text>
@@ -419,7 +419,7 @@ export default function CaptainsLogScreen() {
   const s = useMemo(() => StyleSheet.create({
     container: { flex: 1, backgroundColor: Colors.screenBg },
     topbar:    { backgroundColor: Colors.topbarBg, paddingHorizontal: Spacing.lg, paddingBottom: 12, flexDirection: 'row', alignItems: 'center', gap: 12 },
-    topbarTitle:{ flex: 1, fontFamily: 'Georgia', fontSize: Typography.lg, fontWeight: '700', color: '#fff', letterSpacing: 0.5 },
+    topbarTitle:{ flex: 1, fontFamily: 'Georgia', fontSize: Typography.lg, fontWeight: '700', color: Colors.textPrimary, letterSpacing: 0.5 },
     tabBar:    { flexDirection: 'row', backgroundColor: Colors.topbarBg, borderBottomWidth: 0.5, borderBottomColor: Colors.border },
     tabBtn:    { flex: 1, paddingVertical: 10, alignItems: 'center' },
     tabBtnOn:  { borderBottomWidth: 2, borderBottomColor: Colors.doubloonGold },

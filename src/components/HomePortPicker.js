@@ -46,41 +46,41 @@ export default function HomePortPicker({ visible, onClose }) {
   const s = useMemo(() => StyleSheet.create({
     container: { flex: 1, backgroundColor: Colors.topbarBg },
 
-    header:   { flexDirection: 'row', alignItems: 'center', padding: Spacing.lg, borderBottomWidth: 0.5, borderBottomColor: 'rgba(255,255,255,0.1)' },
-    title:    { fontSize: Typography.lg, fontWeight: '700', color: '#fff', fontFamily: 'Georgia' },
-    sub:      { fontSize: Typography.xs, color: 'rgba(255,255,255,0.45)', marginTop: 2 },
+    header:   { flexDirection: 'row', alignItems: 'center', padding: Spacing.lg, borderBottomWidth: 0.5, borderBottomColor: Colors.border },
+    title:    { fontSize: Typography.lg, fontWeight: '700', color: Colors.textPrimary, fontFamily: 'Georgia' },
+    sub:      { fontSize: Typography.xs, color: Colors.textSecondary, marginTop: 2 },
     closeBtn: { padding: 6 },
-    closeTxt: { fontSize: 18, color: 'rgba(255,255,255,0.6)' },
+    closeTxt: { fontSize: 18, color: Colors.textSecondary },
 
     mapWrap: { flex: 1, position: 'relative' },
     map:     { flex: 1 },
 
     loadingOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(13,33,55,0.7)', alignItems: 'center', justifyContent: 'center', gap: 12 },
-    loadingTxt:     { fontSize: Typography.base, color: '#fff', fontWeight: '500' },
+    loadingTxt:     { fontSize: Typography.base, color: Colors.textOnDark, fontWeight: '500' },
 
-    myLocBtn:  { position: 'absolute', top: 12, left: 12, backgroundColor: Colors.brackishWater, borderRadius: Radius.lg, paddingHorizontal: 14, paddingVertical: 9, flexDirection: 'row', alignItems: 'center' },
-    myLocTxt:  { fontSize: Typography.sm, color: '#fff', fontWeight: '600' },
+    myLocBtn:  { position: 'absolute', top: 12, left: 12, backgroundColor: Colors.buttonBg, borderRadius: Radius.lg, paddingHorizontal: 14, paddingVertical: 9, flexDirection: 'row', alignItems: 'center' },
+    myLocTxt:  { fontSize: Typography.sm, color: Colors.buttonText, fontWeight: '600' },
 
     gpsBtn:    { position: 'absolute', top: 12, right: 12, width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(13,33,55,0.92)', borderWidth: 0.5, borderColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' },
     gpsBtnTxt: { fontSize: 18, color: Colors.brackishWater },
 
     hint:    { position: 'absolute', bottom: 16, left: 16, right: 16, backgroundColor: 'rgba(13,33,55,0.85)', borderRadius: Radius.md, paddingVertical: 8, paddingHorizontal: 12, alignItems: 'center' },
-    hintTxt: { fontSize: Typography.xs, color: 'rgba(255,255,255,0.65)' },
+    hintTxt: { fontSize: Typography.xs, color: Colors.textSecondary },
 
-    homeMarker:    { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(13,33,55,0.9)', borderWidth: 2, borderColor: Colors.doubloonGold, alignItems: 'center', justifyContent: 'center' },
+    homeMarker:    { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(13,33,55,0.9)', borderWidth: 2, borderColor: Colors.catFish, alignItems: 'center', justifyContent: 'center' },
     pinMarker:     { alignItems: 'center' },
-    buoyMarker:    { backgroundColor: Colors.brackishWater, borderRadius: 4, paddingHorizontal: 5, paddingVertical: 2, borderWidth: 1, borderColor: '#fff' },
-    buoyMarkerSel: { backgroundColor: Colors.doubloonGold, borderColor: '#fff', borderWidth: 2 },
-    buoyTxt:       { fontSize: 8, color: '#fff', fontWeight: '700' },
+    buoyMarker:    { backgroundColor: Colors.catTides, borderRadius: 4, paddingHorizontal: 5, paddingVertical: 2, borderWidth: 1, borderColor: Colors.textOnDark },
+    buoyMarkerSel: { backgroundColor: Colors.catFish, borderColor: Colors.textOnDark, borderWidth: 2 },
+    buoyTxt:       { fontSize: 8, color: Colors.textOnDark, fontWeight: '700' },
 
-    card:       { backgroundColor: Colors.topbarBg, borderTopWidth: 0.5, borderTopColor: 'rgba(255,255,255,0.1)', padding: Spacing.lg, paddingBottom: 32, gap: 14 },
+    card:       { backgroundColor: Colors.topbarBg, borderTopWidth: 0.5, borderTopColor: Colors.border, padding: Spacing.lg, paddingBottom: 32, gap: 14 },
     cardRow:    { flexDirection: 'row', alignItems: 'center', gap: 12 },
     cardIcon:   { width: 44, height: 44, borderRadius: 22, backgroundColor: `${Colors.brackishWater}26`, alignItems: 'center', justifyContent: 'center' },
-    cardName:   { fontSize: Typography.base, fontWeight: '600', color: '#fff' },
-    cardMeta:   { fontSize: Typography.xs, color: 'rgba(255,255,255,0.45)', marginTop: 2 },
+    cardName:   { fontSize: Typography.base, fontWeight: '600', color: Colors.textPrimary },
+    cardMeta:   { fontSize: Typography.xs, color: Colors.textSecondary, marginTop: 2 },
     cardClose:  { padding: 4 },
-    confirmBtn: { backgroundColor: Colors.brackishWater, borderRadius: Radius.md, paddingVertical: 13, alignItems: 'center' },
-    confirmTxt: { fontSize: Typography.base, color: '#fff', fontWeight: '700' },
+    confirmBtn: { backgroundColor: Colors.buttonBg, borderRadius: Radius.md, paddingVertical: 13, alignItems: 'center' },
+    confirmTxt: { fontSize: Typography.base, color: Colors.buttonText, fontWeight: '700' },
   }), [Colors])
 
   useEffect(() => {

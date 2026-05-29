@@ -22,7 +22,7 @@ export default function AppNavigator() {
         options={{
           headerShown: true,
           headerStyle: { backgroundColor: Colors.topbarBg },
-          headerTintColor: '#fff',
+          headerTintColor: Colors.textPrimary,
           headerTitle: 'Map & Hotspots',
           headerLeft: () => <HomePortChip/>,
           headerBackVisible: false,
@@ -39,7 +39,7 @@ export default function AppNavigator() {
         options={{
           headerShown: true,
           headerStyle: { backgroundColor: Colors.topbarBg },
-          headerTintColor: '#fff',
+          headerTintColor: Colors.textPrimary,
           headerTitle: 'Shop',
           headerLeft: () => <HomePortChip/>,
           headerBackVisible: false,

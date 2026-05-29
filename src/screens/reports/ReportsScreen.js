@@ -17,8 +17,9 @@ const SPECIES_FILTERS = [
 const TIME_FILTERS = ['All time', 'Today', 'This week', 'This month']
 
 function StarRating({ rating }) {
+  const { Colors } = useTheme()
   return (
-    <Text style={{ fontSize: Typography.sm, color: '#C49A2A' }}>
+    <Text style={{ fontSize: Typography.sm, color: Colors.catFish }}>
       {Array.from({ length: 5 }, (_, i) => i < rating ? '★' : '☆').join('')}
     </Text>
   )

@@ -1,6 +1,7 @@
-import React, { useRef, useState } from 'react'
+import React, { useRef, useState, useCallback } from 'react'
 import { View, StyleSheet } from 'react-native'
 import PagerView from 'react-native-pager-view'
+import * as Haptics from 'expo-haptics'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useTheme } from '../hooks/useTheme'
 import SegmentedStrip from '../components/SegmentedStrip'
@@ -8,7 +9,7 @@ import SegmentedStrip from '../components/SegmentedStrip'
 import DashboardScreen from '../screens/dashboard/DashboardScreen'
 import FishActivityScreen from '../screens/fishactivity/FishActivityScreen'
 import TidesScreen from '../screens/tides/TidesScreen'
-import SolunarScreen from '../screens/tides/SolunarScreen'
+import SolunarScreen from '../screens/solunar/SolunarScreen'
 import WindScreen from '../screens/wind/WindScreen'
 import WavesScreen from '../screens/waves/WavesScreen'
 import WeatherScreen from '../screens/weather/WeatherScreen'
@@ -33,6 +34,11 @@ export default function ConditionsPager() {
 
   const goToPage = (i) => pagerRef.current?.setPage(i)
 
+  const onPageSelected = useCallback((e) => {
+    setActiveIndex(e.nativeEvent.position)
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)
+  }, [])
+
   return (
     <View style={[s.root, { backgroundColor: Colors.topbarBg }]}>
       <SegmentedStrip
@@ -45,7 +51,7 @@ export default function ConditionsPager() {
         ref={pagerRef}
         style={[s.pager, { backgroundColor: Colors.screenBg }]}
         initialPage={0}
-        onPageSelected={(e) => setActiveIndex(e.nativeEvent.position)}
+        onPageSelected={onPageSelected}
       >
         <View key="0" style={s.page}>
           <DashboardScreen pagerRef={pagerRef}/>

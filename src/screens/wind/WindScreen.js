@@ -37,6 +37,7 @@ const SPARK_TIME_MARKS = [
 ]
 
 function WindSparklineLabeled({ speeds, color }) {
+  const { Colors } = useTheme()
   const sparkH = 28
   const filtered = (speeds || []).filter(v => v != null && !isNaN(v))
   if (filtered.length < 2) return null
@@ -71,7 +72,7 @@ function WindSparklineLabeled({ speeds, color }) {
           return (
             <Text key={label + idx + 't'} style={{
               position: 'absolute', left: Math.max(0, x - 10), fontSize: 8,
-              color: 'rgba(255,255,255,0.4)', fontWeight: '600', textAlign: 'center', width: 20,
+              color: Colors.textMuted, fontWeight: '600', textAlign: 'center', width: 20,
             }}>{label}</Text>
           )
         })}
@@ -95,7 +96,7 @@ function WindChart({ speeds, dirs }) {
     nowLine:   { position: 'absolute', top: PAD_T, bottom: PAD_B, width: 1.5, backgroundColor: Colors.doubloonGold },
     scrubLine: { position: 'absolute', top: PAD_T, bottom: PAD_B, width: 1.5, backgroundColor: Colors.brackishWater, opacity: 0.8 },
     bubble:    { position: 'absolute', backgroundColor: Colors.brackishWater, borderRadius: Radius.sm, paddingHorizontal: 8, paddingVertical: 5, minWidth: 72, alignItems: 'center', flexDirection: 'row', gap: 5, justifyContent: 'center' },
-    bubbleVal: { fontSize: 14, fontWeight: '700', color: '#fff' },
+    bubbleVal: { fontSize: 14, fontWeight: '700', color: Colors.textOnDark },
     xLbl:      { position: 'absolute', fontSize: 11, fontWeight: 'bold', color: Colors.textSecondary },
     arrowRow:  { position: 'absolute', flexDirection: 'row', left: PAD_L, right: PAD_R, bottom: 4, justifyContent: 'space-between' },
   }), [Colors])
@@ -275,11 +276,11 @@ export default function WindScreen() {
   const s = useMemo(() => StyleSheet.create({
     container: { flex: 1, backgroundColor: Colors.screenBg },
     topbar:    { backgroundColor: Colors.topbarBg, flexDirection: 'row', alignItems: 'center', paddingHorizontal: Spacing.md, paddingBottom: 12, paddingTop: 10, gap: 8 },
-    topbarTitle: { flex: 1, fontFamily: 'Georgia', fontSize: Typography.lg, fontWeight: '700', color: '#fff', letterSpacing: 0.5 },
+    topbarTitle: { flex: 1, fontFamily: 'Georgia', fontSize: Typography.lg, fontWeight: '700', color: Colors.textPrimary, letterSpacing: 0.5 },
     content:   { padding: Spacing.lg, gap: Spacing.md, paddingBottom: 32 },
     loadingBox:{ alignItems: 'center', paddingTop: 80, gap: 16 },
     loadingTxt:{ fontSize: Typography.base, color: Colors.textMuted },
-    heroCard:  { backgroundColor: Colors.deepSea, borderRadius: Radius.lg, padding: Spacing.md },
+    heroCard:  { backgroundColor: Colors.cardBg, borderRadius: Radius.lg, padding: Spacing.md },
     heroTop:   { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 12 },
     heroLeft:  { flex: 1 },
     heroLabel: { fontSize: Typography.xs, color: Colors.textSecondary, marginBottom: 2 },
@@ -297,7 +298,7 @@ export default function WindScreen() {
     <View style={s.container}>
       <View style={s.topbar}>
         <Text style={s.topbarTitle}>Wind</Text>
-        <LocationChip label={weatherLocation.name} onPress={() => setShowPicker(true)} color="#fff" boneColor={Colors.topbarBg}/>
+        <LocationChip label={weatherLocation.name} onPress={() => setShowPicker(true)} color={Colors.textPrimary} boneColor={Colors.topbarBg}/>
       </View>
 
       <ScrollView

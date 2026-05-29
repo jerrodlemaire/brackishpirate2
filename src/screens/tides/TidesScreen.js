@@ -36,13 +36,13 @@ function TideChart({ hourlyData }) {
   const stepXRef   = useRef(1)
 
   const tc = useMemo(() => StyleSheet.create({
-    wrap:      { height: CHART_H, width: CHART_W, position: 'relative', marginBottom: 4, overflow: 'hidden' },
+    wrap:      { height: CHART_H, width: CHART_W, position: 'relative', marginBottom: 4 },
     gridLbl:   { position: 'absolute', left: 0, width: PAD_L - 4, textAlign: 'right', fontSize: 11, fontWeight: 'bold', color: Colors.textMuted },
     nowLine:   { position: 'absolute', top: PAD_T, bottom: PAD_B, width: 1.5, backgroundColor: Colors.doubloonGold },
     scrubLine: { position: 'absolute', top: PAD_T, bottom: PAD_B, width: 1.5, backgroundColor: Colors.brackishWater, opacity: 0.8 },
-    bubble:    { position: 'absolute', backgroundColor: Colors.brackishWater, borderRadius: Radius.md, paddingHorizontal: 10, paddingVertical: 6, minWidth: 100, alignItems: 'center' },
-    bubbleVal: { fontSize: 16, fontWeight: '700', color: '#fff' },
-    bubbleTime:{ fontSize: 12, color: 'rgba(255,255,255,0.8)', marginTop: 1 },
+    bubble:    { position: 'absolute', backgroundColor: Colors.brackishWater, borderRadius: Radius.md, paddingHorizontal: 10, paddingVertical: 6, minWidth: 100, alignItems: 'center', zIndex: 10, elevation: 10 },
+    bubbleVal: { fontSize: 16, fontWeight: '700', color: Colors.textOnDark },
+    bubbleTime:{ fontSize: 12, color: Colors.textSecondary, marginTop: 1 },
     xLbl:      { position: 'absolute', fontSize: 11, fontWeight: 'bold', color: Colors.textSecondary },
   }), [Colors])
 
@@ -128,7 +128,7 @@ function TideChart({ hourlyData }) {
           const y = PAD_T + PLOT_H - ((v - minVal) / range) * PLOT_H
           return (
             <Path key={i} d={`M ${PAD_L},${y.toFixed(1)} L ${CHART_W - PAD_R},${y.toFixed(1)}`}
-              stroke="rgba(74,143,168,0.15)" strokeWidth="0.5"/>
+              stroke={`${Colors.catTides}26`} strokeWidth="0.5"/>
           )
         })}
         <Path d={areaPath} fill="url(#tideGrad)"/>
@@ -225,12 +225,12 @@ export default function TidesScreen() {
 
     topbar:        { backgroundColor: Colors.topbarBg, flexDirection: 'row', alignItems: 'center', paddingHorizontal: Spacing.md, paddingBottom: 12 },
     topbarBack:    { padding: 4, marginRight: 4 },
-    topbarBackTxt: { fontSize: 26, color: '#fff', lineHeight: 30 },
-    topbarTitle:   { flex: 1, fontFamily: 'Georgia', fontSize: Typography.lg, fontWeight: '700', color: '#fff', letterSpacing: 0.5 },
+    topbarBackTxt: { fontSize: 26, color: Colors.textPrimary, lineHeight: 30 },
+    topbarTitle:   { flex: 1, fontFamily: 'Georgia', fontSize: Typography.lg, fontWeight: '700', color: Colors.textPrimary, letterSpacing: 0.5 },
 
     content: { padding: Spacing.lg, gap: Spacing.md, paddingBottom: 80 },
 
-    heroCard:     { backgroundColor: Colors.deepSea, borderRadius: Radius.lg, padding: 12, flexDirection: 'row', alignItems: 'center' },
+    heroCard:     { backgroundColor: Colors.cardBg, borderRadius: Radius.lg, padding: 12, flexDirection: 'row', alignItems: 'center' },
     heroLeft:     { flex: 1 },
     heroLabel:    { fontSize: Typography.xs, color: Colors.textSecondary, marginBottom: 2 },
     heroVal:      { fontSize: 28, fontWeight: '700', color: Colors.textPrimary, fontFamily: 'Georgia' },
@@ -275,7 +275,7 @@ export default function TidesScreen() {
         <LocationChip
           label={tideStation.name}
           onPress={() => setShowStationPicker(true)}
-          color="#fff"
+          color={Colors.textPrimary}
           boneColor={Colors.topbarBg}
         />
       </View>

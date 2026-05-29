@@ -50,7 +50,7 @@ const Y_GRID = [
   { label: 'Low',  v: 22 },
 ]
 
-const CURVE_GREEN  = '#3FA86E'
+const CURVE_GREEN  = '#5DCAA5'  // trendUp
 const NOW_GOLD     = '#F5D77A'
 const PREFS_KEY    = 'bp_alert_prefs'
 
@@ -260,14 +260,15 @@ function WindowBox({ type, w1, w2, active, onToggle, Colors }) {
 
 // ── Bell icon ─────────────────────────────────────────────────────────────────
 function BellIcon({ state }) {
-  if (state === 'on')      return <Text style={{ fontSize: 20, color: '#C49A2A' }}>🔔</Text>
+  const { Colors } = useTheme()
+  if (state === 'on')      return <Text style={{ fontSize: 20, color: Colors.catFish }}>🔔</Text>
   if (state === 'blocked') return (
     <View>
-      <Text style={{ fontSize: 20, color: '#E24B4A' }}>🔔</Text>
-      <Text style={{ position: 'absolute', right: -4, top: -4, fontSize: 9, color: '#E24B4A', fontWeight: '900' }}>!</Text>
+      <Text style={{ fontSize: 20, color: Colors.danger }}>🔔</Text>
+      <Text style={{ position: 'absolute', right: -4, top: -4, fontSize: 9, color: Colors.danger, fontWeight: '900' }}>!</Text>
     </View>
   )
-  return <Text style={{ fontSize: 20, color: 'rgba(255,255,255,0.35)' }}>🔔</Text>
+  return <Text style={{ fontSize: 20, color: Colors.textMuted }}>🔔</Text>
 }
 
 // ── Alert preferences sheet ───────────────────────────────────────────────────
@@ -289,40 +290,40 @@ function AlertPrefsSheet({ visible, onClose, prefs, setPrefs, osPermission, Colo
     <Modal visible={visible} transparent animationType="slide" presentationStyle="overFullScreen">
       <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={onClose}/>
       <View style={{ backgroundColor: Colors.deepSea, borderTopLeftRadius: Radius.xl, borderTopRightRadius: Radius.xl, padding: Spacing.lg, paddingBottom: 40, gap: Spacing.md }}>
-        <Text style={{ fontSize: Typography.lg, fontWeight: '700', color: '#fff', fontFamily: 'Georgia' }}>
+        <Text style={{ fontSize: Typography.lg, fontWeight: '700', color: Colors.textOnDark, fontFamily: 'Georgia' }}>
           Feeding window alerts
         </Text>
 
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 4 }}>
-          <Text style={{ fontSize: Typography.base, color: '#fff' }}>Major windows</Text>
+          <Text style={{ fontSize: Typography.base, color: Colors.textOnDark }}>Major windows</Text>
           <Switch
             value={prefs.major}
             onValueChange={v => setPrefs(p => ({ ...p, major: v }))}
-            trackColor={{ true: Colors.doubloonGold, false: 'rgba(255,255,255,0.15)' }}
+            trackColor={{ true: Colors.catFish, false: Colors.borderMid }}
           />
         </View>
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 4 }}>
-          <Text style={{ fontSize: Typography.base, color: '#fff' }}>Minor windows</Text>
+          <Text style={{ fontSize: Typography.base, color: Colors.textOnDark }}>Minor windows</Text>
           <Switch
             value={prefs.minor}
             onValueChange={v => setPrefs(p => ({ ...p, minor: v }))}
-            trackColor={{ true: Colors.brackishWater, false: 'rgba(255,255,255,0.15)' }}
+            trackColor={{ true: Colors.brackishWater, false: Colors.borderMid }}
           />
         </View>
 
-        <Text style={{ fontSize: Typography.xs, color: 'rgba(255,255,255,0.45)', marginTop: 4 }}>
+        <Text style={{ fontSize: Typography.xs, color: Colors.textSecondary, marginTop: 4 }}>
           LEAD TIME
         </Text>
         <View style={{ flexDirection: 'row', gap: 8 }}>
           {LEAD_OPTIONS.map(opt => (
             <TouchableOpacity key={opt.value}
               style={{ flex: 1, paddingVertical: 10, borderRadius: Radius.md, alignItems: 'center', borderWidth: 1,
-                borderColor: prefs.leadMinutes === opt.value ? Colors.doubloonGold : Colors.border,
-                backgroundColor: prefs.leadMinutes === opt.value ? `${Colors.doubloonGold}22` : Colors.inputBg,
+                borderColor: prefs.leadMinutes === opt.value ? Colors.catFish : Colors.border,
+                backgroundColor: prefs.leadMinutes === opt.value ? `${Colors.catFish}22` : Colors.inputBg,
               }}
               onPress={() => setPrefs(p => ({ ...p, leadMinutes: opt.value }))}
             >
-              <Text style={{ fontSize: Typography.sm, fontWeight: '600', color: prefs.leadMinutes === opt.value ? Colors.doubloonGold : 'rgba(255,255,255,0.6)' }}>
+              <Text style={{ fontSize: Typography.sm, fontWeight: '600', color: prefs.leadMinutes === opt.value ? Colors.catFish : Colors.textSecondary }}>
                 {opt.label}
               </Text>
             </TouchableOpacity>
@@ -341,7 +342,7 @@ function AlertPrefsSheet({ visible, onClose, prefs, setPrefs, osPermission, Colo
         </View>
 
         <TouchableOpacity onPress={onClose} style={{ paddingVertical: 12, alignItems: 'center' }}>
-          <Text style={{ fontSize: Typography.base, color: 'rgba(255,255,255,0.45)' }}>Done</Text>
+          <Text style={{ fontSize: Typography.base, color: Colors.textSecondary }}>Done</Text>
         </TouchableOpacity>
       </View>
     </Modal>
@@ -355,18 +356,18 @@ function SoftPrePromptModal({ visible, onAllow, onDismiss, Colors }) {
       <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', padding: 24 }}>
         <View style={{ backgroundColor: Colors.deepSea, borderRadius: Radius.xl, padding: Spacing.xl, gap: Spacing.md, alignItems: 'center' }}>
           <Text style={{ fontSize: 40 }}>🔔</Text>
-          <Text style={{ fontSize: Typography.lg, fontWeight: '700', color: '#fff', fontFamily: 'Georgia', textAlign: 'center' }}>
+          <Text style={{ fontSize: Typography.lg, fontWeight: '700', color: Colors.textOnDark, fontFamily: 'Georgia', textAlign: 'center' }}>
             Get a heads-up before the bite
           </Text>
-          <Text style={{ fontSize: Typography.base, color: 'rgba(255,255,255,0.65)', textAlign: 'center', lineHeight: 22 }}>
+          <Text style={{ fontSize: Typography.base, color: Colors.textSecondary, textAlign: 'center', lineHeight: 22 }}>
             Brackish Pirate can alert you 15 minutes before major and minor feeding windows at your Home Port. Notifications stay on your device — we don't send marketing or share anything.
           </Text>
-          <TouchableOpacity style={{ backgroundColor: Colors.doubloonGold, borderRadius: Radius.md, paddingVertical: 14, width: '100%', alignItems: 'center', marginTop: 4 }}
+          <TouchableOpacity style={{ backgroundColor: Colors.buttonBg, borderRadius: Radius.md, paddingVertical: 14, width: '100%', alignItems: 'center', marginTop: 4 }}
             onPress={onAllow}>
-            <Text style={{ fontSize: Typography.base, color: Colors.deepSea, fontWeight: '700' }}>Turn on alerts</Text>
+            <Text style={{ fontSize: Typography.base, color: Colors.buttonText, fontWeight: '700' }}>Turn on alerts</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={onDismiss} style={{ paddingVertical: 8 }}>
-            <Text style={{ fontSize: Typography.base, color: 'rgba(255,255,255,0.4)' }}>Not now</Text>
+            <Text style={{ fontSize: Typography.base, color: Colors.textMuted }}>Not now</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -381,25 +382,25 @@ function OpenSettingsModal({ visible, onDismiss, Colors }) {
       <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', padding: 24 }}>
         <View style={{ backgroundColor: Colors.deepSea, borderRadius: Radius.xl, padding: Spacing.xl, gap: Spacing.md, alignItems: 'center' }}>
           <Text style={{ fontSize: 40 }}>🔕</Text>
-          <Text style={{ fontSize: Typography.lg, fontWeight: '700', color: '#fff', fontFamily: 'Georgia', textAlign: 'center' }}>
+          <Text style={{ fontSize: Typography.lg, fontWeight: '700', color: Colors.textOnDark, fontFamily: 'Georgia', textAlign: 'center' }}>
             Turn on notifications
           </Text>
-          <Text style={{ fontSize: Typography.base, color: 'rgba(255,255,255,0.65)', textAlign: 'center', lineHeight: 22 }}>
+          <Text style={{ fontSize: Typography.base, color: Colors.textSecondary, textAlign: 'center', lineHeight: 22 }}>
             {`To get feeding-window alerts, Brackish Pirate needs notifications enabled in your ${Platform.OS === 'ios' ? 'iPhone' : 'phone\'s'} Settings.`}
           </Text>
           <View style={{ width: '100%', gap: 8, backgroundColor: Colors.inputBg, borderRadius: Radius.md, padding: 12 }}>
             {['Tap Open Settings below', 'Tap Notifications', 'Turn on Allow Notifications'].map((step, i) => (
-              <Text key={i} style={{ fontSize: Typography.sm, color: 'rgba(255,255,255,0.75)', lineHeight: 20 }}>
+              <Text key={i} style={{ fontSize: Typography.sm, color: Colors.textSecondary, lineHeight: 20 }}>
                 {i + 1}. {step}
               </Text>
             ))}
           </View>
           <TouchableOpacity style={{ backgroundColor: Colors.danger, borderRadius: Radius.md, paddingVertical: 14, width: '100%', alignItems: 'center', marginTop: 4 }}
             onPress={() => Linking.openSettings()}>
-            <Text style={{ fontSize: Typography.base, color: '#fff', fontWeight: '700' }}>Open Settings ↗</Text>
+            <Text style={{ fontSize: Typography.base, color: Colors.textOnDark, fontWeight: '700' }}>Open Settings ↗</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={onDismiss} style={{ paddingVertical: 8 }}>
-            <Text style={{ fontSize: Typography.base, color: 'rgba(255,255,255,0.4)' }}>Not now</Text>
+            <Text style={{ fontSize: Typography.base, color: Colors.textMuted }}>Not now</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -580,7 +581,7 @@ export default function FishActivityScreen() {
   const s = useMemo(() => StyleSheet.create({
     container:   { flex: 1, backgroundColor: Colors.screenBg },
     topbar:      { backgroundColor: Colors.topbarBg, flexDirection: 'row', alignItems: 'center', paddingHorizontal: Spacing.md, paddingBottom: 12, paddingTop: 10, gap: 8 },
-    topbarTitle: { flex: 1, fontFamily: 'Georgia', fontSize: Typography.lg, fontWeight: '700', color: '#fff', letterSpacing: 0.5 },
+    topbarTitle: { flex: 1, fontFamily: 'Georgia', fontSize: Typography.lg, fontWeight: '700', color: Colors.textPrimary, letterSpacing: 0.5 },
     content:     { padding: Spacing.lg, gap: Spacing.md, paddingBottom: 80 },
     card:        { backgroundColor: Colors.cardBg, borderRadius: Radius.lg, borderWidth: 0.5, borderColor: Colors.border, padding: Spacing.lg },
     cardTitle:   { fontSize: Typography.base, fontWeight: '600', color: Colors.textPrimary, marginBottom: 12 },
@@ -606,7 +607,7 @@ export default function FishActivityScreen() {
         <LocationChip
           label={tideStation.name}
           onPress={() => setShowStationPicker(true)}
-          color="#fff"
+          color={Colors.textPrimary}
           boneColor={Colors.topbarBg}
         />
       </View>
@@ -617,7 +618,7 @@ export default function FishActivityScreen() {
       {/* SCROLLABLE CONTENT */}
       <ScrollView
         contentContainerStyle={s.content}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadData(selectedDate) }} tintColor={Colors.doubloonGold}/>}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadData(selectedDate) }} tintColor={Colors.catFish}/>}
       >
         {/* Gauge */}
         <View style={{ alignItems: 'center' }}>

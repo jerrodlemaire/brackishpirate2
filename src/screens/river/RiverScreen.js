@@ -203,15 +203,15 @@ function StationStrip({ stations, selectedId, favorites, onSelect }) {
   const { Colors } = useTheme()
 
   const ss = useMemo(() => StyleSheet.create({
-    scroll:   { backgroundColor: Colors.topbarBg, maxHeight: 86 },
-    content:  { paddingHorizontal: 12, paddingVertical: 8, gap: 6 },
-    chip:     { width: 110, padding: 8, borderRadius: Radius.md, borderWidth: 0.5, borderColor: 'rgba(255,255,255,0.12)', backgroundColor: 'rgba(255,255,255,0.04)', gap: 3 },
+    scroll:   { backgroundColor: Colors.topbarBg, maxHeight: 136 },
+    content:  { paddingHorizontal: 12, paddingVertical: 10, gap: 8 },
+    chip:     { width: 160, padding: 12, borderRadius: Radius.md, borderWidth: 0.5, borderColor: Colors.border, backgroundColor: Colors.inputBg, gap: 4 },
     chipSel:  { backgroundColor: `${Colors.brackishWater}40`, borderColor: Colors.brackishWater },
-    name:     { fontSize: 9, color: 'rgba(255,255,255,0.6)', fontWeight: '500', lineHeight: 13 },
-    nameSel:  { color: '#fff' },
-    stage:    { fontSize: Typography.sm, fontWeight: '700', color: '#fff' },
+    name:     { fontSize: Typography.md, color: Colors.textSecondary, fontWeight: '500', lineHeight: 20 },
+    nameSel:  { color: Colors.textPrimary },
+    stage:    { fontSize: Typography.base, fontWeight: '700', color: Colors.textPrimary },
     stageSel: { color: Colors.brackishWater },
-    dist:     { fontSize: 9, color: 'rgba(255,255,255,0.35)' },
+    dist:     { fontSize: Typography.xs, color: Colors.textMuted },
   }), [Colors])
 
   const sorted = [
@@ -229,7 +229,7 @@ function StationStrip({ stations, selectedId, favorites, onSelect }) {
           <TouchableOpacity key={st.id}
             style={[ss.chip, selected && ss.chipSel]}
             onPress={() => onSelect(st)}>
-            <Text style={[ss.name, selected && ss.nameSel]} numberOfLines={1} ellipsizeMode="tail" adjustsFontSizeToFit minimumFontScale={0.7}>{st.name}</Text>
+            <Text style={[ss.name, selected && ss.nameSel]} numberOfLines={2} ellipsizeMode="tail">{st.name}</Text>
             <Text style={[ss.stage, selected && ss.stageSel]}>{formatStage(st.stage)}</Text>
             <Text style={ss.dist}>{st.distance.toFixed(1)} mi</Text>
           </TouchableOpacity>
@@ -255,8 +255,8 @@ export default function RiverScreen() {
   const [error,           setError]           = useState(null)
 
   const TREND_CONFIG = useMemo(() => ({
-    rising:  { icon: '↑', label: 'Rising',  color: '#E07B39' },
-    falling: { icon: '↓', label: 'Falling', color: Colors.brackishWater },
+    rising:  { icon: '↑', label: 'Rising',  color: Colors.warning },
+    falling: { icon: '↓', label: 'Falling', color: Colors.catTides },
     steady:  { icon: '→', label: 'Steady',  color: Colors.textMuted },
   }), [Colors])
 
@@ -312,8 +312,8 @@ export default function RiverScreen() {
 
     topbar:  { backgroundColor: Colors.topbarBg, flexDirection: 'row', alignItems: 'center', paddingHorizontal: Spacing.md, paddingBottom: 12, gap: 8 },
     backBtn: { padding: 4, width: 32 },
-    backTxt: { fontSize: 26, color: '#fff', lineHeight: 30 },
-    title:   { flex: 1, fontFamily: 'Georgia', fontSize: Typography.lg, fontWeight: '700', color: '#fff', letterSpacing: 0.5, textAlign: 'center' },
+    backTxt: { fontSize: 26, color: Colors.textPrimary, lineHeight: 30 },
+    title:   { flex: 1, fontFamily: 'Georgia', fontSize: Typography.lg, fontWeight: '700', color: Colors.textPrimary, letterSpacing: 0.5, textAlign: 'center' },
 
     stripLoading:    { height: 52, backgroundColor: Colors.topbarBg, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8 },
     stripLoadingTxt: { fontSize: Typography.sm, color: Colors.textMuted },
@@ -323,7 +323,7 @@ export default function RiverScreen() {
     errorBox: { alignItems: 'center', paddingTop: 60 },
     errorTxt: { fontSize: Typography.base, color: Colors.textMuted, textAlign: 'center' },
 
-    heroCard:    { backgroundColor: Colors.deepSea, borderRadius: Radius.lg, padding: Spacing.lg, gap: 10, borderWidth: 0.5, borderColor: Colors.border },
+    heroCard:    { backgroundColor: Colors.cardBg, borderRadius: Radius.lg, padding: Spacing.lg, gap: 10, borderWidth: 0.5, borderColor: Colors.border },
     heroStation: { fontSize: Typography.base, fontWeight: '700', color: Colors.textPrimary, fontFamily: 'Georgia' },
     heroSub:     { fontSize: Typography.xs, color: Colors.textMuted },
     heroRow:     { flexDirection: 'row', alignItems: 'center', marginTop: 4 },
