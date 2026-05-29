@@ -28,9 +28,9 @@ export function getTheme(mode = 'dark') {
     success:   d ? '#5DCAA5' : '#1F8A5C',  // alias for trendUp
 
     // Surfaces — mode-dependent
-    screenBg: d ? '#070F18' : '#DCDCE1',
+    screenBg: d ? '#070F18' : '#CCCCD1',
     cardBg:   d ? '#0D2137' : '#E8E8EC',
-    topbarBg: d ? '#070F18' : '#DCDCE1',
+    topbarBg: d ? '#070F18' : '#CCCCD1',
     tabBarBg: d ? '#0D2137' : '#E8E8EC',
     inputBg:  d ? 'rgba(255,255,255,0.06)' : '#F0F0F2',
 
@@ -59,8 +59,8 @@ export function getTheme(mode = 'dark') {
 
     // Deprecated — still defined to avoid crashes; migrate callers off these
     amberLight:   d ? '#C49A2A' : '#A87A10',  // → doubloonGold / warning
-    parchment:    d ? '#070F18' : '#DCDCE1',  // → screenBg
-    midnightTide: d ? '#070F18' : '#DCDCE1',  // → screenBg
+    parchment:    d ? '#070F18' : '#CCCCD1',  // → screenBg
+    midnightTide: d ? '#070F18' : '#CCCCD1',  // → screenBg
   }
 }
 
