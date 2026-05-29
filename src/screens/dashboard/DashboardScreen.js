@@ -9,7 +9,7 @@ import { Typography, Spacing, Radius } from '../../constants/theme'
 import { useTheme } from '../../hooks/useTheme'
 import { getSolunarForDate, buildCompositeCurve, peakWeightedAverage, scoreColor } from '../../utils/solunar'
 import ActivityGauge from '../../components/ActivityGauge'
-import { fetchTideHourly } from '../../utils/tides'
+import { fetchTideHourly, fetchTideHiLo } from '../../utils/tides'
 import { fetchWeatherAndForecast, fetchMarineData, fetchWaterTemp, fetchPressureTrend, windDir, getWindColor } from '../../utils/weather'
 import JollyRoger from '../../components/JollyRoger'
 import WindCompass from '../../components/WindCompass'
@@ -19,6 +19,16 @@ import { useDataLocation } from '../../hooks/useDataLocation'
 
 function shortTime(t) {
   return t.replace(' AM', 'a').replace(' PM', 'p')
+}
+
+function fmtHiLoTime(t) {
+  const [, timeStr] = t.split(' ')
+  const [hStr, m] = timeStr.split(':')
+  let h = parseInt(hStr)
+  const ampm = h >= 12 ? 'p' : 'a'
+  if (h > 12) h -= 12
+  if (h === 0) h = 12
+  return `${h}:${m}${ampm}`
 }
 
 function MiniSparkline({ values, color, h = 28, w = 88 }) {
@@ -55,6 +65,7 @@ export default function DashboardScreen({ pagerRef }) {
   const [marine,       setMarine]       = useState(null)
   const [waterTemp,    setWaterTemp]    = useState(null)
   const [hourlyTide,   setHourlyTide]   = useState([])
+  const [hiLoTide,     setHiLoTide]     = useState([])
   const [dP,           setDP]           = useState(0)
   const [pressureHpa,  setPressureHpa]  = useState(null)
   const [pressureSpark,setPressureSpark]= useState([])
@@ -66,17 +77,19 @@ export default function DashboardScreen({ pagerRef }) {
 
   const loadData = useCallback(async () => {
     try {
-      const [w, m, wt, tide, pressure] = await Promise.all([
+      const [w, m, wt, tide, hiLo, pressure] = await Promise.all([
         fetchWeatherAndForecast(homePort.lat, homePort.lng),
         fetchMarineData(buoy.lat ?? 29.212, buoy.lng ?? -88.208),
         fetchWaterTemp(),
         fetchTideHourly(new Date(), activeStation.id),
+        fetchTideHiLo(new Date(), activeStation.id),
         fetchPressureTrend(homePort.lat, homePort.lng),
       ])
       setWeather(w)
       setMarine(m)
       setWaterTemp(wt)
       setHourlyTide(tide)
+      setHiLoTide(hiLo)
       setDP(pressure?.dP ?? 0)
       const rawArr = pressure?.hourlyPressure ?? []
       setPressureHpa(rawArr.length > 0 ? rawArr[Math.min(5, rawArr.length - 1)] : null)
@@ -103,6 +116,7 @@ export default function DashboardScreen({ pagerRef }) {
 
   const airTemp    = weather?.current ? Math.round(weather.current.temperature_2m)  : null
   const windSpd    = weather?.current ? Math.round(weather.current.windspeed_10m)   : null
+  const windGust   = weather?.current?.windgusts_10m != null ? Math.round(weather.current.windgusts_10m) : null
   const windDirStr = weather?.current ? windDir(weather.current.winddirection_10m)  : ''
   const waveHt     = marine?.current?.wave_height != null ? marine.current.wave_height.toFixed(1) : null
   const waveDirStr = marine?.current?.wave_direction != null ? windDir(marine.current.wave_direction) : ''
@@ -113,6 +127,11 @@ export default function DashboardScreen({ pagerRef }) {
   const pressureTrend    = dP > 1 ? 'Rising ↑' : dP < -1 ? 'Falling ↓' : 'Steady →'
   const pressureTrendClr = dP > 1 ? Colors.trendUp : dP < -1 ? Colors.trendDown : Colors.textSecondary
 
+  const highTides  = hiLoTide.filter(t => t.type === 'H')
+  const lowTides   = hiLoTide.filter(t => t.type === 'L')
+  const tideRange  = highTides.length > 0 && lowTides.length > 0
+    ? (Math.max(...highTides.map(t => parseFloat(t.v))) - Math.min(...lowTides.map(t => parseFloat(t.v)))).toFixed(1)
+    : null
   const tideSpark  = hourlyTide.length > 0 ? hourlyTide.slice(0, 24).map(p => parseFloat(p.v)) : null
   const waveSpark  = marine?.hourlyWaves?.filter(v => v != null).length > 0 ? marine.hourlyWaves : null
   const windSpark  = weather?.hourlyWindSpeeds?.length > 0 ? weather.hourlyWindSpeeds : null
@@ -233,19 +252,47 @@ export default function DashboardScreen({ pagerRef }) {
           <Text style={[s.dataCardVal, { color: Colors.brackishWater }]}>{curTide !== null ? `${curTide.toFixed(2)} ft` : '—'}</Text>
           <Text style={s.dataCardSub}>{curTide !== null ? (tideRising ? 'Incoming ↑' : 'Outgoing ↓') : 'Loading…'}</Text>
           <MiniSparkline values={tideSpark} color={Colors.brackishWater}/>
+          {hiLoTide.length > 0 && (
+            <View style={{ marginTop: 4, gap: 1 }}>
+              {highTides.length > 0 && (
+                <Text style={{ fontSize: 8, color: Colors.catFish, fontWeight: '700' }} numberOfLines={1} adjustsFontSizeToFit>
+                  {'HIGH ' + highTides.map(t => `${fmtHiLoTime(t.t)} ${parseFloat(t.v).toFixed(1)}ft`).join(' · ')}
+                </Text>
+              )}
+              {lowTides.length > 0 && (
+                <Text style={{ fontSize: 8, color: Colors.brackishWater, fontWeight: '700' }} numberOfLines={1} adjustsFontSizeToFit>
+                  {'LOW  ' + lowTides.map(t => `${fmtHiLoTime(t.t)} ${parseFloat(t.v).toFixed(1)}ft`).join(' · ')}
+                </Text>
+              )}
+              {tideRange !== null && (
+                <Text style={{ fontSize: 8, color: Colors.textSecondary, fontWeight: '600', marginTop: 2 }}>
+                  RANGE  {tideRange} ft
+                </Text>
+              )}
+            </View>
+          )}
         </TouchableOpacity>
 
         {/* Row 2 */}
         <TouchableOpacity style={[s.dataCard, s.dataCardTeal]} onPress={() => pagerRef?.current?.setPage(4)} activeOpacity={0.8}>
           <Text style={s.dataCardLabel}>WIND</Text>
-          <Text style={[s.dataCardVal, { color: windSpd !== null ? getWindColor(windSpd) : Colors.brackishWater }]}>{windSpd !== null ? `${windSpd} mph` : '—'}</Text>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 6 }}>
-            {weather?.current?.winddirection_10m != null && (
-              <WindCompass deg={weather.current.winddirection_10m} size={22} color={windSpd !== null ? getWindColor(windSpd) : Colors.brackishWater}/>
-            )}
-            <Text style={[s.dataCardSub, { marginBottom: 0 }]}>{windDirStr || 'Loading…'}</Text>
+          <View style={{ alignSelf: 'center', marginVertical: 4 }}>
+            <WindCompass deg={weather?.current?.winddirection_10m ?? 0} size={52} color={windSpd !== null ? getWindColor(windSpd) : Colors.brackishWater}/>
           </View>
-          <MiniSparkline values={windSpark} color={windSpd !== null ? getWindColor(windSpd) : Colors.brackishWater}/>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-around', width: '100%', marginTop: 2 }}>
+            <View style={{ alignItems: 'center' }}>
+              <Text style={[s.dataCardVal, { color: windSpd !== null ? getWindColor(windSpd) : Colors.brackishWater }]}>
+                {windSpd !== null ? `${windSpd}` : '—'}
+              </Text>
+              <Text style={s.dataCardSub}>Wind mph</Text>
+            </View>
+            {windGust !== null && (
+              <View style={{ alignItems: 'center' }}>
+                <Text style={[s.dataCardVal, { color: getWindColor(windGust) }]}>{windGust}</Text>
+                <Text style={s.dataCardSub}>Gusts mph</Text>
+              </View>
+            )}
+          </View>
         </TouchableOpacity>
 
         <TouchableOpacity style={[s.dataCard, s.dataCardTeal]} onPress={() => pagerRef?.current?.setPage(5)} activeOpacity={0.8}>
