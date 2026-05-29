@@ -1,141 +1,82 @@
-import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  ActivityIndicator, RefreshControl, Dimensions, PanResponder,
+  View, Text, StyleSheet, ScrollView,
+  ActivityIndicator, RefreshControl, Dimensions,
 } from 'react-native'
-import Svg, { Path, Defs, LinearGradient, Stop } from 'react-native-svg'
-import * as Haptics from 'expo-haptics'
 import WindCompass from '../../components/WindCompass'
 import { Typography, Spacing, Radius } from '../../constants/theme'
 import { useTheme } from '../../hooks/useTheme'
 import { fetchWeatherAndForecast, windDir, getWindColor } from '../../utils/weather'
 import { useDataLocation } from '../../hooks/useDataLocation'
-import { smoothBezierPath, smoothAreaPath } from '../../utils/chart'
 import LocationChip from '../../components/LocationChip'
 import LocationPickerModal from '../../components/LocationPickerModal'
 
 const { width } = Dimensions.get('window')
 const CHART_W = width - 32
-const CHART_H = 140
-const PAD_L   = 36
-const PAD_R   = 12
-const PAD_T   = 14
-const PAD_B   = 32
-const PLOT_W  = CHART_W - PAD_L - PAD_R
-const PLOT_H  = CHART_H - PAD_T - PAD_B
 
-const HOURS = ['12a', '3a', '6a', '9a', '12p', '3p', '6p', '9p']
+// Convert an hour-of-day (0–23) to a single-line label like 12am / 6pm
+function hourLabel(h) {
+  const ampm = h < 12 ? 'am' : 'pm'
+  const hr   = h % 12 === 0 ? 12 : h % 12
+  return `${hr}${ampm}`
+}
 
-function WindChart({ speeds, dirs }) {
+// Vertical bar graph: one bar per hour (height + color = speed) with a wind
+// vane above each bar showing direction at that hour.
+const PLOT_H = 150     // total column height: vane + speed label + bar
+const ARROW  = 30      // large wind vane atop each bar
+const TOP_RESERVE = ARROW + 24   // space kept above the bar for vane + speed label
+
+function WindChart({ bars }) {
   const { Colors } = useTheme()
-  const [scrubIdx, setScrubIdx] = useState(null)
-  const panRef     = useRef(null)
-  const getIdxFn   = useRef(null)
-  const dataRef    = useRef([])
-  const stepXRef   = useRef(1)
-  const lastHaptic = useRef(-1)
 
   const wc = useMemo(() => StyleSheet.create({
-    wrap:      { height: CHART_H, width: CHART_W, position: 'relative', marginBottom: 4, overflow: 'hidden' },
-    gridLbl:   { position: 'absolute', left: 0, width: PAD_L - 4, textAlign: 'right', fontSize: 11, fontWeight: 'bold', color: Colors.textMuted },
-    nowLine:   { position: 'absolute', top: PAD_T, bottom: PAD_B, width: 1.5, backgroundColor: Colors.doubloonGold },
-    scrubLine: { position: 'absolute', top: PAD_T, bottom: PAD_B, width: 1.5, backgroundColor: Colors.brackishWater, opacity: 0.8 },
-    bubble:    { position: 'absolute', backgroundColor: Colors.brackishWater, borderRadius: Radius.sm, paddingHorizontal: 8, paddingVertical: 5, minWidth: 72, alignItems: 'center', flexDirection: 'row', gap: 5, justifyContent: 'center' },
-    bubbleVal: { fontSize: 14, fontWeight: '700', color: Colors.textOnDark },
-    xLbl:      { position: 'absolute', fontSize: 11, fontWeight: 'bold', color: Colors.textSecondary },
-    arrowRow:  { position: 'absolute', flexDirection: 'row', left: PAD_L, right: PAD_R, bottom: 4, justifyContent: 'space-between' },
+    wrap:    { width: CHART_W, marginBottom: 4, paddingHorizontal: 10 },
+    plot:    { height: PLOT_H, flexDirection: 'row', alignItems: 'flex-end' },
+    col:     { flex: 1, height: PLOT_H, alignItems: 'center', justifyContent: 'flex-end' },
+    speed:   { fontSize: Typography.sm, fontWeight: '700', marginBottom: 3 },
+    bar:     { width: 24, borderRadius: 5 },
+    xRow:    { flexDirection: 'row', marginTop: 6 },
+    xCell:   { flex: 1, alignItems: 'center' },
+    xLbl:    { fontSize: Typography.xs, fontWeight: '700', color: Colors.textSecondary },
+    xLblNow: { color: Colors.doubloonGold },
   }), [Colors])
 
-  if (!panRef.current) {
-    panRef.current = PanResponder.create({
-      onStartShouldSetPanResponder: () => false,
-      onMoveShouldSetPanResponder: (_e, g) =>
-        Math.abs(g.dx) > 6 && Math.abs(g.dx) > Math.abs(g.dy),
-      onMoveShouldSetPanResponderCapture: (_e, g) =>
-        Math.abs(g.dx) > 6 && Math.abs(g.dx) > Math.abs(g.dy),
-      onPanResponderGrant: (e) => {
-        const i = getIdxFn.current?.(e.nativeEvent.locationX)
-        if (i != null) { setScrubIdx(i); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); lastHaptic.current = i }
-      },
-      onPanResponderMove: (e) => {
-        const i = getIdxFn.current?.(e.nativeEvent.locationX)
-        if (i != null) { setScrubIdx(i); if (i !== lastHaptic.current) { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); lastHaptic.current = i } }
-      },
-      onPanResponderRelease: () => { setTimeout(() => setScrubIdx(null), 2500) },
-    })
-  }
-
-  if (!speeds || speeds.length === 0) return (
-    <View style={[wc.wrap, { alignItems: 'center', justifyContent: 'center' }]}><ActivityIndicator color={Colors.brackishWater}/></View>
+  if (!bars || bars.length === 0) return (
+    <View style={{ width: CHART_W, height: PLOT_H, alignItems: 'center', justifyContent: 'center' }}>
+      <ActivityIndicator color={Colors.brackishWater}/>
+    </View>
   )
 
-  const minVal = 0
-  const maxVal = Math.max(...speeds, 5)
-  const range  = maxVal - minVal || 1
-  const stepX  = PLOT_W / (speeds.length - 1)
-  dataRef.current  = speeds; stepXRef.current = stepX
-  getIdxFn.current = (x) => Math.max(0, Math.min(dataRef.current.length - 1, Math.round((x - PAD_L) / stepXRef.current)))
-  const pan  = panRef.current
-  const pts  = speeds.map((v, i) => ({ x: PAD_L + i * stepX, y: PAD_T + PLOT_H - ((v - minVal) / range) * PLOT_H, v }))
-  const nowX = PAD_L + Math.min(new Date().getHours(), speeds.length - 1) * stepX
-  const scrub      = scrubIdx !== null ? pts[scrubIdx] : null
-  const lineColor  = getWindColor(maxVal)
-  const gridVals   = [0, Math.round(maxVal * 0.5), Math.round(maxVal)]
-  const arrowHours = [0, 3, 6, 9, 12, 15, 18, 21]
+  const rawMax  = Math.max(...bars.map(b => b.speed), 5)
+  const barMax  = PLOT_H - TOP_RESERVE
 
   return (
-    <View
-      style={wc.wrap}
-      onTouchStart={(e) => {
-        const i = getIdxFn.current?.(e.nativeEvent.locationX)
-        if (i != null) setScrubIdx(i)
-      }}
-      {...pan.panHandlers}
-    >
-      <Svg width={CHART_W} height={CHART_H - PAD_B + 4} style={{ position: 'absolute', top: 0, left: 0 }}>
-        <Defs>
-          <LinearGradient id="windGradWS" x1="0" y1="0" x2="0" y2="1">
-            <Stop offset="0" stopColor={lineColor} stopOpacity="0.35"/>
-            <Stop offset="1" stopColor={lineColor} stopOpacity="0.03"/>
-          </LinearGradient>
-        </Defs>
-        {gridVals.map((v, i) => {
-          const y = PAD_T + PLOT_H - ((v - minVal) / range) * PLOT_H
-          return <Path key={i} d={`M ${PAD_L},${y.toFixed(1)} L ${CHART_W - PAD_R},${y.toFixed(1)}`} stroke={`${lineColor}20`} strokeWidth="0.5"/>
+    <View style={wc.wrap}>
+      <View style={wc.plot}>
+        {bars.map((b, i) => {
+          const color = getWindColor(b.speed)
+          const h     = Math.max(4, (b.speed / rawMax) * barMax)
+          const isNow = i === 0
+          return (
+            <View key={i} style={wc.col}>
+              {b.dir != null && (
+                <WindCompass deg={b.dir} size={ARROW} color={color} strokeWidth={isNow ? 4 : 3}/>
+              )}
+              <Text style={[wc.speed, { color }]}>{Math.round(b.speed)}</Text>
+              <View style={[wc.bar, { height: h, backgroundColor: color, opacity: isNow ? 1 : 0.85 }]}/>
+            </View>
+          )
         })}
-        <Path d={smoothAreaPath(pts, CHART_H - PAD_B)} fill="url(#windGradWS)"/>
-        <Path d={smoothBezierPath(pts)} fill="none" stroke={lineColor} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-      </Svg>
-      {gridVals.map((v, i) => {
-        const y = PAD_T + PLOT_H - ((v - minVal) / range) * PLOT_H
-        return <Text key={i} style={[wc.gridLbl, { top: y - 6 }]}>{v}</Text>
-      })}
-      <View style={[wc.nowLine, { left: nowX }]}/>
-      {scrub && (
-        <>
-          <View style={[wc.scrubLine, { left: scrub.x, backgroundColor: getWindColor(scrub.v) }]}/>
-          <View style={[wc.bubble, { left: Math.min(Math.max(scrub.x - 40, PAD_L), CHART_W - PAD_R - 90), top: scrub.y - 40, backgroundColor: getWindColor(scrub.v) }]}>
-            {dirs && dirs[scrubIdx] != null && <WindCompass deg={dirs[scrubIdx]} size={14} color="#fff"/>}
-            <Text style={wc.bubbleVal}>{Math.round(scrub.v)} mph</Text>
+      </View>
+
+      <View style={wc.xRow}>
+        {bars.map((b, i) => (
+          <View key={i} style={wc.xCell}>
+            <Text style={[wc.xLbl, i === 0 && wc.xLblNow]}>{hourLabel(b.hour)}</Text>
           </View>
-        </>
-      )}
-      {HOURS.map((l, i) => (
-        <Text key={i} style={[wc.xLbl, { left: PAD_L + (PLOT_W / (HOURS.length - 1)) * i - 8, top: CHART_H - PAD_B + 4 }]}>{l}</Text>
-      ))}
-      {dirs && dirs.length > 0 && (
-        <View style={wc.arrowRow}>
-          {arrowHours.map(h => {
-            const idx = Math.min(h, dirs.length - 1)
-            if (dirs[idx] == null) return <View key={h} style={{ width: 18 }}/>
-            return (
-              <View key={h} style={{ alignItems: 'center' }}>
-                <WindCompass deg={dirs[idx]} size={18} color={`${Colors.brackishWater}CC`}/>
-              </View>
-            )
-          })}
-        </View>
-      )}
+        ))}
+      </View>
     </View>
   )
 }
@@ -211,8 +152,15 @@ export default function WindScreen() {
 
   const cur     = weather?.current
   const daily   = weather?.daily
-  const wSpeeds = weather?.hourlyWindSpeeds || []
-  const wDirs   = weather?.hourlyWindDirs   || []
+
+  // Rolling 6-hour window starting at the current hour (can cross midnight).
+  const wSpeedsAll = weather?.hourlyWindSpeedsFull || []
+  const wDirsAll   = weather?.hourlyWindDirsFull   || []
+  const nowHour    = new Date().getHours()
+  const hourlyBars = Array.from({ length: 6 }, (_, k) => {
+    const idx = nowHour + k
+    return { hour: idx % 24, speed: wSpeedsAll[idx], dir: wDirsAll[idx] }
+  }).filter(b => b.speed != null && !isNaN(b.speed))
 
   const windSpd    = cur ? Math.round(cur.windspeed_10m) : null
   const gustSpd    = cur?.windgusts_10m != null ? Math.round(cur.windgusts_10m) : null
@@ -285,8 +233,8 @@ export default function WindScreen() {
 
             <View style={[s.card, { paddingHorizontal: 0, overflow: 'hidden' }]}>
               <Text style={[s.cardTitle, { paddingHorizontal: Spacing.lg }]}>Hourly wind</Text>
-              <Text style={[s.cardSub, { paddingHorizontal: Spacing.lg }]}>Speed (mph) · arrows show direction</Text>
-              <WindChart speeds={wSpeeds} dirs={wDirs}/>
+              <Text style={[s.cardSub, { paddingHorizontal: Spacing.lg }]}>Next 6 hours · speed (mph) + direction</Text>
+              <WindChart bars={hourlyBars}/>
             </View>
 
             <View style={s.card}>

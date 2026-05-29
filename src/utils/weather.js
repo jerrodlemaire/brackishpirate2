@@ -31,7 +31,7 @@ export function getWindColor(speed) {
 }
 
 export async function fetchWeatherAndForecast(lat = LAT, lng = LNG) {
-  const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current=temperature_2m,apparent_temperature,windspeed_10m,winddirection_10m,weathercode&hourly=temperature_2m,windspeed_10m,winddirection_10m&daily=temperature_2m_max,temperature_2m_min,windspeed_10m_max,winddirection_10m_dominant,precipitation_probability_max,weathercode&temperature_unit=fahrenheit&windspeed_unit=mph&timezone=America%2FChicago&forecast_days=10`
+  const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current=temperature_2m,apparent_temperature,windspeed_10m,winddirection_10m,windgusts_10m,weathercode&hourly=temperature_2m,windspeed_10m,winddirection_10m&daily=temperature_2m_max,temperature_2m_min,windspeed_10m_max,winddirection_10m_dominant,precipitation_probability_max,weathercode&temperature_unit=fahrenheit&windspeed_unit=mph&timezone=America%2FChicago&forecast_days=10`
   const res  = await fetch(url)
   const data = await res.json()
   if (!data.current) throw new Error('Weather API unavailable')
@@ -41,6 +41,10 @@ export async function fetchWeatherAndForecast(lat = LAT, lng = LNG) {
     hourlyTemps:      data.hourly?.temperature_2m?.slice(0, 24) ?? [],
     hourlyWindSpeeds: data.hourly?.windspeed_10m?.slice(0, 24) ?? [],
     hourlyWindDirs:   data.hourly?.winddirection_10m?.slice(0, 24) ?? [],
+    // Full (multi-day) hourly series — used for the Wind page's rolling
+    // "next 6 hours" window, which can cross midnight.
+    hourlyWindSpeedsFull: data.hourly?.windspeed_10m ?? [],
+    hourlyWindDirsFull:   data.hourly?.winddirection_10m ?? [],
   }
 }
 
