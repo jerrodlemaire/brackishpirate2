@@ -548,7 +548,7 @@ export default function WeatherScreen() {
   const loTemp       = daily?.temperature_2m_min?.[selIdx]
   const maxWind      = daily?.windspeed_10m_max?.[selIdx]
   const windDirDom   = daily?.winddirection_10m_dominant?.[selIdx]
-  const pressureInHg = pressureHpa != null ? (pressureHpa * 0.02953).toFixed(2) : null
+  const pressureMb = pressureHpa != null ? Math.round(pressureHpa) : null  // hPa == mb (maritime standard)
   const pressureTrend = pressureDp > 1 ? ' ↑' : pressureDp < -1 ? ' ↓' : ''
 
   return (
@@ -619,10 +619,10 @@ export default function WeatherScreen() {
                     </Text>
                   </View>
                 )}
-                {isToday && pressureInHg != null && (
+                {isToday && pressureMb != null && (
                   <View style={s.heroStat}>
                     <Text style={s.heroStatLbl}>BARO</Text>
-                    <Text style={s.heroStatVal}>{pressureInHg} {pressureTrend}</Text>
+                    <Text style={s.heroStatVal}>{pressureMb} mb{pressureTrend}</Text>
                   </View>
                 )}
               </View>

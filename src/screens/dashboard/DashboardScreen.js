@@ -123,7 +123,7 @@ export default function DashboardScreen({ pagerRef }) {
   const todayHigh  = weather?.daily?.temperature_2m_max?.[0]
   const todayLow   = weather?.daily?.temperature_2m_min?.[0]
 
-  const pressureInHg     = pressureHpa != null ? (pressureHpa * 0.02953).toFixed(2) : null
+  const pressureMb       = pressureHpa != null ? Math.round(pressureHpa) : null  // hPa == mb (maritime standard)
   const pressureTrend    = dP > 1 ? 'Rising ↑' : dP < -1 ? 'Falling ↓' : 'Steady →'
   const pressureTrendClr = dP > 1 ? Colors.trendUp : dP < -1 ? Colors.trendDown : Colors.textSecondary
 
@@ -321,8 +321,8 @@ export default function DashboardScreen({ pagerRef }) {
           <Text style={s.dataCardLabel}>BAROMETRIC PRESSURE</Text>
           <View style={{ flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between' }}>
             <View>
-              <Text style={[s.dataCardVal, { color: Colors.catFish }]}>{pressureInHg !== null ? `${pressureInHg} inHg` : '—'}</Text>
-              <Text style={[s.dataCardSub, { color: pressureTrendClr }]}>{pressureInHg !== null ? pressureTrend : 'Loading…'}</Text>
+              <Text style={[s.dataCardVal, { color: Colors.catFish }]}>{pressureMb !== null ? `${pressureMb} mb` : '—'}</Text>
+              <Text style={[s.dataCardSub, { color: pressureTrendClr }]}>{pressureMb !== null ? pressureTrend : 'Loading…'}</Text>
             </View>
             <MiniSparkline values={pressureSpark} color={Colors.catFish} w={120}/>
           </View>
