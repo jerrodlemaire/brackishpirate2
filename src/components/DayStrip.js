@@ -23,7 +23,7 @@ export default function DayStrip({ selectedDate, onSelect }) {
 
   const ds = useMemo(() => StyleSheet.create({
     scroll:       { backgroundColor: Colors.topbarBg },
-    content:      { paddingHorizontal: 8, paddingVertical: 10, gap: 4, alignItems: 'center' },
+    content:      { paddingHorizontal: 8, paddingVertical: 14, gap: 4, alignItems: 'center' },
     monthSep:     { justifyContent: 'center', paddingHorizontal: 10, paddingVertical: 4, marginRight: 2 },
     monthTxt:     { fontSize: 9, fontWeight: '700', color: Colors.textSecondary, letterSpacing: 0.5, textTransform: 'uppercase' },
     pill:         { width: 54, alignItems: 'center', paddingVertical: 8, borderRadius: Radius.md, borderWidth: 0.5, borderColor: Colors.border, backgroundColor: Colors.inputBg, gap: 2 },

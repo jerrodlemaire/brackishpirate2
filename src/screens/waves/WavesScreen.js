@@ -43,7 +43,7 @@ function WaveChart({ waves }) {
   const lastHaptic = useRef(-1)
 
   const wc = useMemo(() => StyleSheet.create({
-    wrap:      { height: CHART_H, width: CHART_W, position: 'relative', marginBottom: 4, overflow: 'hidden' },
+    wrap:      { height: CHART_H, width: CHART_W, position: 'relative', marginBottom: 4 },
     gridLbl:   { position: 'absolute', left: 0, width: PAD_L - 4, textAlign: 'right', fontSize: 11, fontWeight: 'bold', color: Colors.textMuted },
     nowLine:   { position: 'absolute', top: PAD_T, bottom: PAD_B, width: 1.5, backgroundColor: Colors.doubloonGold },
     scrubLine: { position: 'absolute', top: PAD_T, bottom: PAD_B, width: 1.5, backgroundColor: Colors.brackishWater, opacity: 0.8 },
@@ -144,7 +144,7 @@ function WaveChart({ waves }) {
           <View style={[wc.scrubLine, { left: scrub.x }]}/>
           <View style={[wc.bubble, {
             left: Math.min(Math.max(scrub.x - 30, PAD_L), CHART_W - PAD_R - 70),
-            top: scrub.y - 38,
+            top: (scrub.y - 38) >= PAD_T ? scrub.y - 38 : scrub.y + 8,
           }]}>
             <Text style={wc.bubbleVal}>{scrub.v.toFixed(1)} ft</Text>
           </View>
@@ -167,7 +167,7 @@ function WavesDayStrip({ dailyMax, selectedIdx, onSelect }) {
 
   const dws = useMemo(() => StyleSheet.create({
     scroll:  { backgroundColor: Colors.topbarBg },
-    content: { paddingHorizontal: 12, paddingVertical: 10, gap: 6, alignItems: 'center' },
+    content: { paddingHorizontal: 12, paddingVertical: 18, gap: 6, alignItems: 'center' },
     pill:    { width: 62, alignItems: 'center', paddingTop: 8, paddingBottom: 14, borderRadius: Radius.md, borderWidth: 0.5, borderColor: Colors.border, backgroundColor: Colors.inputBg, gap: 4 },
     pillSel: { backgroundColor: Colors.borderMid, borderColor: Colors.textPrimary },
     label:   { fontSize: 9, color: Colors.textSecondary, fontWeight: '600', letterSpacing: 0.3 },
@@ -245,6 +245,17 @@ export default function WavesScreen() {
   const hourlyWaves = marine?.hourlyWaves  || []
   const dailyMax    = marine?.dailyMaxWaves || []
   const currentWave = marine?.current
+
+  // Only show obs cards the selected buoy actually reports — many buoys lack
+  // wave-direction / air-temp / water-temp sensors, so those come back null.
+  const obsItems = ndbcObs ? [
+    { label: 'Wave height', icon: '🌊', val: ndbcObs.waveHeight != null ? `${ndbcObs.waveHeight} ft` : null },
+    { label: 'Dom. period', icon: '⏱',  val: ndbcObs.period     != null ? `${ndbcObs.period} sec`   : null },
+    { label: 'Wave dir',    icon: '🧭', val: ndbcObs.waveDir    != null ? waveDir(ndbcObs.waveDir)  : null },
+    { label: 'Wind speed',  icon: '💨', val: ndbcObs.windSpeed  != null ? `${ndbcObs.windSpeed} kt` : null },
+    { label: 'Air temp',    icon: '🌡', val: ndbcObs.airTemp    != null ? `${ndbcObs.airTemp}°F`    : null },
+    { label: 'Water temp',  icon: '🌊', val: ndbcObs.waterTemp  != null ? `${ndbcObs.waterTemp}°F`  : null },
+  ].filter(c => c.val != null) : []
 
   const s = useMemo(() => StyleSheet.create({
     container: { flex: 1, backgroundColor: Colors.screenBg },
@@ -379,19 +390,12 @@ export default function WavesScreen() {
             )}
 
             {/* NDBC buoy observations */}
-            {ndbcObs && (
+            {obsItems.length > 0 && (
               <View style={s.card}>
                 <Text style={s.cardTitle}>NDBC buoy {buoy.id}</Text>
                 <Text style={s.cardSub}>Latest observed conditions</Text>
                 <View style={s.obsGrid}>
-                  {[
-                    { label: 'Wave height', val: ndbcObs.waveHeight != null ? `${ndbcObs.waveHeight} ft` : '—', icon: '🌊' },
-                    { label: 'Dom. period',  val: ndbcObs.period     != null ? `${ndbcObs.period} sec`   : '—', icon: '⏱' },
-                    { label: 'Wave dir',     val: ndbcObs.waveDir    != null ? waveDir(ndbcObs.waveDir)  : '—', icon: '🧭' },
-                    { label: 'Wind speed',   val: ndbcObs.windSpeed  != null ? `${ndbcObs.windSpeed} kt` : '—', icon: '💨' },
-                    { label: 'Air temp',     val: ndbcObs.airTemp    != null ? `${ndbcObs.airTemp}°F`    : '—', icon: '🌡' },
-                    { label: 'Water temp',   val: ndbcObs.waterTemp  != null ? `${ndbcObs.waterTemp}°F`  : '—', icon: '🌊' },
-                  ].map((c, i) => (
+                  {obsItems.map((c, i) => (
                     <View key={i} style={s.obsCard}>
                       <Text style={s.obsIcon}>{c.icon}</Text>
                       <Text style={s.obsLabel}>{c.label}</Text>

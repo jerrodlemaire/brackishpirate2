@@ -34,14 +34,27 @@ export async function fetchNdbcObservations(buoyId) {
 
     // Line 0: column names (starts with #YY MM DD ...)
     const cols     = lines[0]?.replace(/^#+\s*/, '').trim().split(/\s+/) ?? []
-    const dataLine = lines.find(l => !l.startsWith('#') && l.trim())
-    if (!dataLine || !cols.length) return null
+    // NDBC lists newest-first. Sensors report on different cadences, so any
+    // single row has 'MM' (missing) scattered across columns — e.g. wave
+    // height/period only appear every other row. Read the most recent
+    // non-missing value per field by scanning recent rows newest → oldest,
+    // instead of trusting only the latest row.
+    const dataRows = lines
+      .filter(l => !l.startsWith('#') && l.trim())
+      .slice(0, 24)
+      .map(l => l.trim().split(/\s+/))
+    if (!dataRows.length || !cols.length) return null
 
-    const vals = dataLine.trim().split(/\s+/)
-    const get  = (col) => {
+    const get = (col) => {
       const i = cols.indexOf(col)
-      if (i < 0 || vals[i] === 'MM' || vals[i] == null) return null
-      return parseFloat(vals[i])
+      if (i < 0) return null
+      for (const vals of dataRows) {
+        const raw = vals[i]
+        if (raw == null || raw === 'MM') continue
+        const n = parseFloat(raw)
+        if (!isNaN(n)) return n
+      }
+      return null
     }
 
     const wvht = get('WVHT')

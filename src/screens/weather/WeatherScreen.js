@@ -440,7 +440,7 @@ function WeatherDayStrip({ daily, selectedIdx, onSelect }) {
   const { Colors } = useTheme()
   const wds = useMemo(() => StyleSheet.create({
     scroll:  { backgroundColor: Colors.topbarBg },
-    content: { paddingHorizontal: 12, paddingVertical: 10, gap: 6 },
+    content: { paddingHorizontal: 12, paddingVertical: 14, gap: 6, alignItems: 'center' },
     pill:    { width: 68, alignItems: 'center', paddingVertical: 8, borderRadius: Radius.md, borderWidth: 0.5, borderColor: Colors.border, backgroundColor: Colors.inputBg, gap: 2 },
     pillSel: { backgroundColor: Colors.borderMid, borderColor: Colors.textPrimary },
     label:   { fontSize: 9, color: Colors.textSecondary, fontWeight: '600', letterSpacing: 0.3 },
