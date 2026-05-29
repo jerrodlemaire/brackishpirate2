@@ -63,7 +63,7 @@ export default function BuoyPickerModal({ visible, onClose, onSelect, currentBuo
   }
 
   return (
-    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
+    <Modal visible={visible} animationType="slide" presentationStyle="overFullScreen" onRequestClose={onClose}>
       <View style={s.container}>
 
         <View style={s.header}>

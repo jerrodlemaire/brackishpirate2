@@ -85,7 +85,7 @@ export default function LocationPickerModal({
   }
 
   return (
-    <Modal visible={visible} animationType="slide" onRequestClose={handleClose}>
+    <Modal visible={visible} animationType="slide" presentationStyle="overFullScreen" onRequestClose={handleClose}>
       <View style={s.container}>
 
         <View style={s.header}>

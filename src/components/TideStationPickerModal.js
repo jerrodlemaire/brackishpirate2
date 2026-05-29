@@ -62,7 +62,7 @@ export default function TideStationPickerModal({ visible, onClose, onSelect, cur
   }
 
   return (
-    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
+    <Modal visible={visible} animationType="slide" presentationStyle="overFullScreen" onRequestClose={onClose}>
       <View style={s.container}>
 
         <View style={s.header}>

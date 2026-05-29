@@ -150,7 +150,7 @@ export default function HomePortPicker({ visible, onClose }) {
   ).slice(0, 80)
 
   return (
-    <Modal visible={visible} animationType="slide" onRequestClose={handleClose}>
+    <Modal visible={visible} animationType="slide" presentationStyle="overFullScreen" onRequestClose={handleClose}>
       <View style={s.container}>
 
         {/* Header */}

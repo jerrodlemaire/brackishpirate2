@@ -246,7 +246,7 @@ function RadarCard({ lat, lng, windData }) {
         {frames.length > 0 && <Timeline/>}
       </View>
 
-      <Modal visible={fullscreen} animationType="slide" statusBarTranslucent>
+      <Modal visible={fullscreen} animationType="slide" presentationStyle="overFullScreen" statusBarTranslucent>
         <View style={rc.fsContainer}>
           <MapView style={StyleSheet.absoluteFillObject} provider={PROVIDER_GOOGLE}
             mapType="satellite" initialRegion={region} showsUserLocation
