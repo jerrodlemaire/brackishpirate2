@@ -201,9 +201,12 @@ function ActivityChart({ curve, sol, showMajor, showMinor, onToggleMajor, onTogg
         ))}
 
         {showNow && (
-          <Text style={{ position: 'absolute', left: nowX - 7, top: nowY - 14, fontSize: 11, transform: [{ scaleX: -1 }] }}>
-            🐟
-          </Text>
+          // scaleX must live on the wrapping View — a transform on the <Text>
+          // itself does not mirror the emoji glyph on iOS. Flips the natural
+          // left-facing 🐟 to face right (its direction of travel).
+          <View style={{ position: 'absolute', left: nowX - 7, top: nowY - 14, transform: [{ scaleX: -1 }] }}>
+            <Text style={{ fontSize: 11 }}>🐟</Text>
+          </View>
         )}
 
         {X_LABELS.map(({ label, h }) => (
@@ -228,12 +231,7 @@ function WindowBox({ type, w1, w2, active, onToggle, Colors }) {
   const bg     = active ? `${color}14` : Colors.cardBg
 
   const FishIcon = () => (
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 1 }}>
-      <Text style={{ fontSize: isMaj ? 13 : 18, lineHeight: 20 }}>🐟</Text>
-      {isMaj && (
-        <Text style={{ fontSize: 13, lineHeight: 20, transform: [{ scaleX: -1 }] }}>🐟</Text>
-      )}
-    </View>
+    <Text style={{ fontSize: isMaj ? 24 : 18, lineHeight: 26 }}>🐟</Text>
   )
 
   return (
