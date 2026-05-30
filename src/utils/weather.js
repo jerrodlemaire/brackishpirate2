@@ -30,11 +30,31 @@ export function getWindColor(speed) {
   return '#5DCAA5'                   // trendUp / calm
 }
 
+// Fetch JSON with one retry. The pager mounts several screens that hit
+// Open-Meteo simultaneously on load, so a request occasionally comes back
+// non-OK / rate-limited. Retry once, then surface the real cause (HTTP status
+// or the API's "reason") rather than a generic "unavailable".
+async function fetchJson(url, label) {
+  let lastErr
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const res = await fetch(url)
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const data = await res.json()
+      if (data?.error) throw new Error(data.reason || 'API error')
+      return data
+    } catch (e) {
+      lastErr = e
+      if (attempt === 0) await new Promise(r => setTimeout(r, 500))
+    }
+  }
+  throw new Error(`${label} unavailable (${lastErr?.message || 'network error'})`)
+}
+
 export async function fetchWeatherAndForecast(lat = LAT, lng = LNG) {
   const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current=temperature_2m,apparent_temperature,windspeed_10m,winddirection_10m,windgusts_10m,weathercode&hourly=temperature_2m,windspeed_10m,winddirection_10m&daily=temperature_2m_max,temperature_2m_min,windspeed_10m_max,winddirection_10m_dominant,precipitation_probability_max,weathercode&temperature_unit=fahrenheit&windspeed_unit=mph&timezone=America%2FChicago&forecast_days=10`
-  const res  = await fetch(url)
-  const data = await res.json()
-  if (!data.current) throw new Error('Weather API unavailable')
+  const data = await fetchJson(url, 'Weather API')
+  if (!data.current) throw new Error('Weather API returned no current conditions')
   return {
     current:          data.current,
     daily:            data.daily,
@@ -64,8 +84,7 @@ export async function fetchPressureTrend(lat = LAT, lng = LNG) {
 
 export async function fetchMarineData(lat = LAT, lng = LNG) {
   const url = `https://marine-api.open-meteo.com/v1/marine?latitude=${lat}&longitude=${lng}&current=wave_height,wave_direction&hourly=wave_height&daily=wave_height_max&length_unit=imperial&forecast_days=7`
-  const res  = await fetch(url)
-  const data = await res.json()
+  const data = await fetchJson(url, 'Marine API')
   return {
     current:      data.current,
     hourlyWaves:  data.hourly?.wave_height?.slice(0, 24) ?? [],
